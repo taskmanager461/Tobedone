@@ -48,6 +48,47 @@ class APIClient:
         response.raise_for_status()
         return response.json()
 
+    def get_my_profile(self) -> dict[str, Any]:
+        response = requests.get(
+            self._url("/social/profile"),
+            headers=self._auth_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def update_profile(
+        self,
+        name: str | None = None,
+        public_profile: bool | None = None,
+        show_level: bool | None = None,
+        show_streak: bool | None = None,
+        show_xp: bool | None = None,
+        bio: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if name is not None:
+            payload["name"] = name
+        if public_profile is not None:
+            payload["public_profile"] = public_profile
+        if show_level is not None:
+            payload["show_level"] = show_level
+        if show_streak is not None:
+            payload["show_streak"] = show_streak
+        if show_xp is not None:
+            payload["show_xp"] = show_xp
+        if bio is not None:
+            payload["bio"] = bio
+
+        response = requests.put(
+            self._url("/social/profile"),
+            json=payload,
+            headers=self._auth_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def get_tasks(self, user_id: int, day: date) -> list[dict[str, Any]]:
         response = requests.get(
             self._url("/tasks"),

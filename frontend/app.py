@@ -29,10 +29,10 @@ except ModuleNotFoundError:
 st.set_page_config(page_title=translate("en", "app_title"), page_icon="🎯", layout="wide")
 
 MENU = {
-    "dashboard": "menu_dashboard",
     "tasks": "menu_tasks",
-    "weekly": "menu_weekly",
-    "notifications": "menu_notifications",
+    "reports": "menu_reports",
+    "insights": "menu_insights",
+    "me": "menu_me",
     "settings": "menu_settings",
 }
 T = TypeVar("T")
@@ -41,8 +41,11 @@ T = TypeVar("T")
 def init_state() -> None:
     # Handle Navigation from Query Params
     query_menu = st.query_params.get("menu")
-    if query_menu and query_menu in MENU:
-        st.session_state.menu = query_menu
+    if query_menu:
+        if query_menu == "dashboard":
+            st.session_state.menu = "reports"
+        elif query_menu in MENU:
+            st.session_state.menu = query_menu
 
     legacy_lang = st.session_state.get("language")
     defaults = {
@@ -53,7 +56,7 @@ def init_state() -> None:
         "access_token": "",
         "dark_mode": False,
         "lang": "en",
-        "menu": "dashboard",
+        "menu": "tasks",
         "last_daily_summary": "",
         "notifications": [],
         "install_prompt_requested": False,
@@ -216,13 +219,12 @@ def inject_pwa_support() -> None:
 def render_bottom_nav() -> None:
     active_menu = st.session_state.menu
     
-    # Define icons for each menu item
     icons = {
-        "dashboard": "fa-solid fa-house",
         "tasks": "fa-solid fa-list-check",
-        "weekly": "fa-solid fa-chart-line",
-        "notifications": "fa-solid fa-bell",
-        "settings": "fa-solid fa-user-gear"
+        "reports": "fa-solid fa-chart-column",
+        "insights": "fa-solid fa-lightbulb",
+        "me": "fa-solid fa-user",
+        "settings": "fa-solid fa-user-gear",
     }
     
     items_html = ""
@@ -426,6 +428,8 @@ def render_auth(client: APIClient) -> None:
                     st.session_state.username = data["username"]
                     st.session_state.name = data["name"]
                     st.session_state.access_token = data.get("access_token", "")
+                    st.session_state.menu = "tasks"
+                    st.session_state.tasks_goals_tab = "Tasks"
                     st.toast(t("logged_in_success"))
                     st.rerun()
 
@@ -452,6 +456,8 @@ def render_auth(client: APIClient) -> None:
                     st.session_state.username = data["username"]
                     st.session_state.name = data["name"]
                     st.session_state.access_token = data.get("access_token", "")
+                    st.session_state.menu = "tasks"
+                    st.session_state.tasks_goals_tab = "Tasks"
                     st.toast(t("account_created"))
                     st.rerun()
 
@@ -621,7 +627,7 @@ def dashboard_page(client: APIClient, user_id: int) -> None:
 
 
 def weekly_report_page(client: APIClient, user_id: int) -> None:
-    st.markdown(f"<div class='section-title'>{t('weekly_report')}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='section-title'>{t('insights')}</div>", unsafe_allow_html=True)
     end_day = st.date_input(t("week_ending"), value=date.today(), key="week_end")
     start_day = end_day - timedelta(days=6)
     st.caption(t("range_label", start=start_day.isoformat(), end=end_day.isoformat()))
@@ -1130,6 +1136,66 @@ def notifications_page() -> None:
         )
 
 
+def me_page(client: APIClient) -> None:
+    st.markdown(f"<div class='section-title'>{t('me')}</div>", unsafe_allow_html=True)
+
+    if "profile_avatar_color" not in st.session_state:
+        st.session_state.profile_avatar_color = "blue"
+
+    initials = "".join([part[0] for part in st.session_state.name.split()[:2]]).upper() if st.session_state.name else st.session_state.username[:2].upper()
+    avatar_colors = {
+        "blue": "#2563eb",
+        "green": "#16a34a",
+        "purple": "#7c3aed",
+        "orange": "#ea580c",
+        "slate": "#64748b",
+    }
+
+    columns = st.columns([1, 2])
+    with columns[0]:
+        st.markdown(
+            f"<div style='width:110px; height:110px; border-radius:50%; background:{avatar_colors.get(st.session_state.profile_avatar_color, '#2563eb')}; display:flex; align-items:center; justify-content:center; color:#fff; font-size:40px; margin-bottom:1rem;'>{initials}</div>",
+            unsafe_allow_html=True,
+        )
+        st.caption(t("editable_profile_note"))
+
+    with columns[1]:
+        with st.form("profile_form", clear_on_submit=False):
+            display_name = st.text_input(t("display_name"), value=st.session_state.name or "", key="profile_name")
+            st.text_input(t("username"), value=st.session_state.username or "", disabled=True)
+            selected_avatar = st.selectbox(
+                t("avatar_style"),
+                list(avatar_colors.keys()),
+                index=list(avatar_colors.keys()).index(st.session_state.profile_avatar_color),
+                format_func=lambda key: t(f"avatar_color_{key}"),
+                key="profile_avatar_select",
+            )
+            submitted = st.form_submit_button(t("save_profile"), type="primary")
+            if submitted:
+                new_name = display_name.strip() or st.session_state.name
+                st.session_state.name = new_name
+                st.session_state.profile_avatar_color = selected_avatar
+
+                update_err = None
+                if st.session_state.access_token:
+                    _, update_err = call_api(
+                        client.update_profile,
+                        name=new_name,
+                        fallback_message=t("profile_save_failed"),
+                    )
+
+                if update_err:
+                    st.error(update_err)
+                else:
+                    st.toast(t("profile_updated"))
+                    st.rerun()
+
+    st.markdown("---")
+    st.markdown(f"**{t('user_info')}**")
+    st.markdown(f"- {t('username')}: {st.session_state.username}")
+    st.markdown(f"- {t('name')}: {st.session_state.name}")
+
+
 def settings_page() -> None:
     st.markdown(f"<div class='section-title'>{t('settings')}</div>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
@@ -1168,7 +1234,7 @@ def settings_page() -> None:
         st.session_state.username = ""
         st.session_state.name = ""
         st.session_state.access_token = ""
-        st.session_state.menu = "dashboard"
+        st.session_state.menu = "tasks"
         st.toast(t("logged_out"))
         st.rerun()
 
@@ -1188,14 +1254,14 @@ def main() -> None:
     render_bottom_nav()
     render_top_header()
     user_id = int(st.session_state.user_id)
-    if st.session_state.menu == "dashboard":
+    if st.session_state.menu in ("dashboard", "reports"):
         dashboard_page(client, user_id)
     elif st.session_state.menu == "tasks":
         tasks_analytics_page(client, user_id)
-    elif st.session_state.menu == "weekly":
+    elif st.session_state.menu == "insights":
         weekly_report_page(client, user_id)
-    elif st.session_state.menu == "notifications":
-        notifications_page()
+    elif st.session_state.menu == "me":
+        me_page(client)
     elif st.session_state.menu == "settings":
         settings_page()
 
