@@ -108,7 +108,9 @@ async def health_check():
 @app.get("/manifest.json")
 async def get_manifest():
     path = FRONTEND_DIR / "manifest.json"
-    return FileResponse(path) if path.exists() else {"error": "manifest.json not found"}
+    if path.exists():
+        return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return {"error": "manifest.json not found"}
 
 @app.get("/sw.js")
 async def get_sw():
@@ -120,27 +122,37 @@ async def get_sw():
 @app.get("/favicon.png")
 async def get_favicon():
     path = STATIC_DIR / "favicon.png"
-    return FileResponse(path) if path.exists() else {"error": "favicon.png not found"}
+    if path.exists():
+        return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return {"error": "favicon.png not found"}
 
 @app.get("/icon-192.png")
 async def get_icon192():
     path = STATIC_DIR / "icon-192.png"
-    return FileResponse(path) if path.exists() else {"error": "icon-192.png not found"}
+    if path.exists():
+        return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return {"error": "icon-192.png not found"}
 
 @app.get("/icon-512.png")
 async def get_icon512():
     path = STATIC_DIR / "icon-512.png"
-    return FileResponse(path) if path.exists() else {"error": "icon-512.png not found"}
+    if path.exists():
+        return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return {"error": "icon-512.png not found"}
 
 @app.get("/styles.css")
 async def get_css():
     path = FRONTEND_DIR / "styles.css"
-    return FileResponse(path) if path.exists() else {"error": "styles.css not found"}
+    if path.exists():
+        return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return {"error": "styles.css not found"}
 
 @app.get("/app.js")
 async def get_js():
     path = FRONTEND_DIR / "app.js"
-    return FileResponse(path) if path.exists() else {"error": "app.js not found"}
+    if path.exists():
+        return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return {"error": "app.js not found"}
 
 def _serve_root_badge(filename: str) -> FileResponse:
     path = PROJECT_ROOT / filename
