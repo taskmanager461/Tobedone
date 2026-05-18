@@ -31,6 +31,9 @@ let cachedHabits = [];
 let calendarDate = new Date();
 let calendarTasks = [];
 let dashboardCalendarDate = new Date();
+const apiCache = new Map();
+const CACHE_TTL = 45000; // milliseconds
+
 let notifiedTasks = new Set();
 let notifiedHabits = new Set();
 let currentTasksGoalsTab = 'tasks';
@@ -1036,16 +1039,26 @@ showView = function(viewId) {
 async function apiFetch(endpoint, options = {}) {
     // Ensure endpoint starts with /api/ if it doesn't already
     const apiEndpoint = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`;
-    
+    const method = (options.method || 'GET').toUpperCase();
+    const body = typeof options.body === 'string' ? options.body : options.body ? JSON.stringify(options.body) : null;
+    const cacheKey = `${apiEndpoint}::${method}::${body || ''}`;
+
     options.headers = {
         ...options.headers,
         'Content-Type': 'application/json'
     };
-    
+
     if (supabaseAccessToken) {
         options.headers['Authorization'] = `Bearer ${supabaseAccessToken}`;
     }
-    
+
+    if (method === 'GET' && !body) {
+        const cached = apiCache.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+            return JSON.parse(JSON.stringify(cached.data));
+        }
+    }
+
     try {
         const response = await fetch(`${API_BASE_URL}${apiEndpoint}`, options);
         if (response.status === 401) {
@@ -1055,7 +1068,6 @@ async function apiFetch(endpoint, options = {}) {
         }
         if (!response.ok) {
             const error = await response.json();
-            // Handle Pydantic validation errors
             let message = t('error_occurred');
             if (typeof error.detail === 'string') {
                 message = error.detail;
@@ -1064,7 +1076,13 @@ async function apiFetch(endpoint, options = {}) {
             }
             throw new Error(message);
         }
-        return response.json();
+        const data = await response.json();
+        if (method === 'GET' && !body) {
+            apiCache.set(cacheKey, { timestamp: Date.now(), data });
+        } else {
+            apiCache.clear();
+        }
+        return data;
     } catch (err) {
         if (err.message !== 'Session expired') {
             showToast(err.message, 'error');
@@ -1343,6 +1361,7 @@ async function loadReports() {
         await calendarPromise;
 
         renderHeroMetrics(score);
+        renderSeriesTable(score);
 
         const progressFill = document.getElementById('daily-progress-fill');
         if (progressFill) progressFill.style.width = `${score.success_rate * 100}%`;
@@ -1361,6 +1380,35 @@ async function loadReports() {
     } catch (err) {
         console.error('Reports load failed', err);
     }
+}
+
+function renderSeriesTable(score) {
+    const container = document.getElementById('reports-score-table');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="report-summary-card">
+            <h3>Score Snapshot</h3>
+            <div class="report-summary-grid">
+                <div class="summary-item">
+                    <span class="label">Series</span>
+                    <strong>${score.streak}</strong>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Trust Score</span>
+                    <strong>${score.score.toFixed(1)}</strong>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Daily Progress</span>
+                    <strong>${Math.round(score.success_rate * 100)}%</strong>
+                </div>
+                <div class="summary-item">
+                    <span class="label">Today’s Tasks</span>
+                    <strong>${score.total_tasks || 0}</strong>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 async function loadMe() {
