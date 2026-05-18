@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: self-trust-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.9"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: SMTP_ENABLED
+        value: "true"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: self-trust-frontend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run frontend/app.py --server.address 0.0.0.0 --server.port $PORT --client.toolbarMode hidden
+    autoDeploy: true
+    envVars:
+      - key: API_BASE_URL
+        sync: false # Set this to your backend URL (e.g., https://self-trust-backend.onrender.com)
+      - key: STREAMLIT_THEME_BASE
+        value: "dark"
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: "false"

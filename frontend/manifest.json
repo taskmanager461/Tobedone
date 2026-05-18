@@ -1,0 +1,30 @@
+{
+  "name": "Tobedone",
+  "short_name": "Tobedone",
+  "description": "Tobedone - Your Consistency Engine",
+  "id": "/",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "portrait",
+  "scope": "/",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/static/icon-home-192-v7.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon-home-512-v7.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon-home-512-v7.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tobedone</title>
+    <link rel="stylesheet" href="styles.css?v=3.8.9">
+    <link rel="stylesheet" href="/src/styles/logo.css?v=4.5">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/assets/app-logo-20260501.png?v=4">
+    <meta name="theme-color" content="#000000">
+    <link rel="apple-touch-icon" href="/static/icon-home-192-v7.png">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="assets.js"></script>
+</head>
+<body class="dark-mode"> <!-- Default to dark mode for pro feel -->
+    <div class="bg-lines-container">
+        <div class="bg-line bg-line-1"></div>
+        <div class="bg-line bg-line-2"></div>
+        <div class="bg-line bg-line-3"></div>
+        <div class="bg-line bg-line-4"></div>
+        <div class="bg-line bg-line-5"></div>
+    </div>
+    <div id="toast-container" class="toast-container"></div>
+    <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <header class="mobile-header">
+        <button class="hamburger" onclick="toggleSidebar()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <img class="brand-logo logo" src="/assets/app-logo-20260501.png?v=3" alt="Tobedone logo">
+            <h2 data-i18n="app_title"><span style="color: var(--primary);">T</span>obedone</h2>
+        </div>
+        <div style="width: 40px;"></div> <!-- Spacer for balance -->
+    </header>
+
+    <!-- Auth Page -->
+    <div id="auth-page" class="page active">
+        <div class="auth-container">
+            <img class="auth-logo logo" src="/assets/app-logo-20260501.png?v=3" alt="Tobedone logo">
+            <h1 class="main-title">
+                <span class="main-title-t">T</span><span class="main-title-rest">obedone</span>
+            </h1>
+            <p class="brand-tagline">Plan it. Do it. Done.</p>
+            <div class="tabs">
+                <button id="tab-login" class="tab active" onclick="switchAuthTab('login')">
+                    <i class="fas fa-user"></i>
+                    <span data-i18n="login">Sign In</span>
+                </button>
+                <button id="tab-signup" class="tab" onclick="switchAuthTab('signup')">
+                    <i class="fas fa-user-plus"></i>
+                    <span data-i18n="signup">Sign Up</span>
+                </button>
+            </div>
+
+            <div class="auth-oauth">
+                <button id="google-signin-btn" type="button" class="btn oauth-btn full-width">
+                    <span class="oauth-icon" aria-hidden="true"></span>
+                    <span data-i18n="continue_with_google">Continue with Google</span>
+                </button>
+            </div>
+
+            <form id="login-form" class="auth-form active">
+                <div class="input-group">
+                    <input type="email" id="login-email" data-i18n="email" placeholder="Email" required autocomplete="email">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="login-password" data-i18n="password" placeholder="Password" required autocomplete="current-password">
+                    <button type="button" class="password-toggle" data-target="login-password" aria-label="Toggle password visibility">
+                        <i class="fas fa-eye" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <button type="submit" class="btn primary" data-i18n="login">Sign In</button>
+                <button type="button" id="forgot-password-link" class="btn link-btn" data-i18n="forgot_password">Forgot password?</button>
+            </form>
+
+            <form id="signup-form" class="auth-form">
+                <div class="input-group">
+                    <input type="text" id="signup-name" data-i18n="full_name" placeholder="Full Name" required autocomplete="name">
+                </div>
+                <div class="input-group">
+                    <input type="text" id="signup-username" data-i18n="username" placeholder="Username" required autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <input type="email" id="signup-email" data-i18n="email" placeholder="Email" required autocomplete="email">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="signup-password" data-i18n="password" placeholder="Password" required autocomplete="new-password">
+                    <button type="button" class="password-toggle" data-target="signup-password" aria-label="Toggle password visibility">
+                        <i class="fas fa-eye" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <button type="submit" class="btn primary" data-i18n="create_account">Create Account</button>
+            </form>
+
+            <form id="forgot-form" class="auth-form">
+                <div class="auth-note" data-i18n="forgot_password_note">Enter your email and we’ll send you a reset link.</div>
+                <div class="input-group">
+                    <input type="email" id="forgot-email" data-i18n="email" placeholder="Email" required autocomplete="email">
+                </div>
+                <button type="submit" class="btn primary" data-i18n="send_reset_link">Send reset link</button>
+                <div class="auth-divider"><span data-i18n="or">or</span></div>
+                <input type="text" id="recovery-otp" data-i18n="reset_code" placeholder="Reset code" inputmode="numeric" autocomplete="one-time-code">
+                <button type="button" id="recovery-otp-btn" class="btn secondary" data-i18n="use_code">Use code</button>
+                <button type="button" id="forgot-back-link" class="btn link-btn" data-i18n="back_to_login">Back to login</button>
+            </form>
+
+            <div id="verify-form" class="auth-form">
+                <div class="auth-note">
+                    <div class="auth-note-title" data-i18n="verify_email_title">Verify your email</div>
+                    <div id="verify-email-text" class="auth-note-body" data-i18n="verify_email_body">Check your inbox and click the verification link to continue.</div>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="verify-otp" data-i18n="verification_code" placeholder="Verification code" inputmode="numeric" autocomplete="one-time-code">
+                </div>
+                <button type="button" id="verify-otp-btn" class="btn primary" data-i18n="verify_code">Verify code</button>
+                <button type="button" id="resend-verification-btn" class="btn secondary" data-i18n="resend_verification">Resend verification email</button>
+                <button type="button" id="verify-back-link" class="btn link-btn" data-i18n="back_to_login">Back to login</button>
+            </div>
+
+            <form id="reset-form" class="auth-form">
+                <div class="auth-note">
+                    <div class="auth-note-title" data-i18n="reset_password_title">Set a new password</div>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="reset-password" data-i18n="new_password" placeholder="New password" required autocomplete="new-password">
+                    <button type="button" class="password-toggle" data-target="reset-password" aria-label="Toggle password visibility">
+                        <i class="fas fa-eye" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="reset-password-confirm" data-i18n="confirm_password" placeholder="Confirm password" required autocomplete="new-password">
+                    <button type="button" class="password-toggle" data-target="reset-password-confirm" aria-label="Toggle password visibility">
+                        <i class="fas fa-eye" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <button type="submit" class="btn primary" data-i18n="update_password">Update password</button>
+            </form>
+            <div id="auth-error" class="error-msg"></div>
+        </div>
+    </div>
+
+    <!-- Main App Layout -->
+    <div id="main-app" class="page">
+        <button class="hamburger desktop-only" onclick="toggleSidebar()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <aside id="sidebar">
+            <div class="sidebar-header">
+                <img class="sidebar-logo logo" src="/assets/app-logo-20260501.png?v=3" alt="Tobedone logo">
+                <div class="sidebar-info">
+                    <h2 data-i18n="app_title"><span style="color: var(--primary);">T</span>obedone</h2>
+                    <span id="user-display-name">User</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" onclick="showView('reports')">
+                    <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
+                    <span data-i18n="reports">Reports</span>
+                </button>
+                <button class="nav-item" onclick="showView('tasks')">
+                    <span class="nav-icon"><i class="fas fa-tasks"></i></span>
+                    <span data-i18n="tasks">Tasks</span>
+                </button>
+                <button class="nav-item" onclick="showView('insights')">
+                    <span class="nav-icon"><i class="fas fa-chart-bar"></i></span>
+                    <span data-i18n="insights">Insights</span>
+                </button>
+                <button class="nav-item" onclick="showView('me')">
+                    <span class="nav-icon"><i class="fas fa-user"></i></span>
+                    <span data-i18n="me">Me</span>
+                </button>
+                <button class="nav-item" onclick="showView('settings')">
+                    <span class="nav-icon"><i class="fas fa-cog"></i></span>
+                    <span data-i18n="settings">Settings</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="install-btn" class="btn secondary full-width" style="display:none; margin-bottom: 1rem;">Install App</button>
+                <button onclick="logout()" class="btn logout-btn full-width">
+                    <span class="nav-icon"><i class="fas fa-sign-out-alt"></i></span>
+                    <span data-i18n="logout">Logout</span>
+                </button>
+            </div>
+        </aside>
+
+        <main id="content">
+            <!-- Reports View -->
+            <section id="view-reports" class="view active">
+                <div class="view-header">
+                    <h1 data-i18n="reports">Reports</h1>
+                </div>
+                
+                <!-- Monthly Calendar -->
+                <div class="card calendar-container" style="margin-bottom: 1.5rem;">
+                    <div class="calendar-header">
+                        <button class="btn secondary" onclick="changeDashboardMonth(-1)">❮</button>
+                        <h2 id="dashboard-calendar-month-year">Month Year</h2>
+                        <button class="btn secondary" onclick="changeDashboardMonth(1)">❯</button>
+                    </div>
+                    <div class="calendar-grid" id="dashboard-calendar-grid">
+                        <!-- Calendar injected here -->
+                    </div>
+                </div>
+
+                <div class="card habits-today-card" style="margin-bottom: 1.5rem;">
+                    <div class="identity-header">
+                        <h3>Today's Habits</h3>
+                        <span class="priority-badge priority-medium">Consistency</span>
+                    </div>
+                    <div id="today-habits-list" class="habit-list"></div>
+                </div>
+                
+                <div id="dashboard-hero-metrics" class="hero-metric-grid">
+                    <!-- Hero Metrics injected by app.js -->
+                </div>
+
+                <div class="card progress-section" style="margin-bottom: 1.5rem;">
+                    <div class="progress-header">
+                        <label data-i18n="daily_progress">Daily Progress</label>
+                        <span id="multiplier-badge" class="priority-badge priority-low" style="display:none">1.0x Boost</span>
+                    </div>
+                    <div class="progress-bar"><div id="daily-progress-fill" style="width: 0%"></div></div>
+                </div>
+
+                <div id="weekly-summary" class="card" style="margin-top: 1.5rem; display: none;">
+                    <h3>Weekly Summary</h3>
+                    <div id="weekly-summary-content"></div>
+                </div>
+            </section>
+
+            <!-- Me View -->
+            <section id="view-me" class="view">
+                <div class="view-header">
+                    <h1 data-i18n="me">Me</h1>
+                </div>
+
+                <div class="card identity-card" style="margin-bottom: 1.5rem;">
+                    <div class="identity-header">
+                        <h3>Identity</h3>
+                        <span id="identity-level-badge" class="priority-badge priority-low">Level 1</span>
+                    </div>
+                    <div class="identity-progress-wrap">
+                        <div class="progress-bar">
+                            <div id="identity-xp-fill" class="identity-xp-fill" style="width: 0%"></div>
+                        </div>
+                        <div id="identity-xp-text" class="identity-xp-text">XP 0/100 Total 0</div>
+                    </div>
+                    <div id="identity-stats" class="identity-stats"></div>
+                    <div class="identity-trust">
+                        <span class="label">Trust Sync</span>
+                        <span id="identity-trust-value" class="value">0.0</span>
+                    </div>
+                    <div id="identity-badges" class="identity-badges"></div>
+                    <button onclick="openShareModal()" class="btn primary" style="width: 100%; margin-top: 1rem;">
+                        <i class="fas fa-share-alt" style="margin-right: 0.5rem;"></i> Share Progress
+                    </button>
+                </div>
+
+                <div class="card for-you-card" style="margin-bottom: 1.5rem;">
+                    <div class="identity-header">
+                        <h3>For You</h3>
+                        <span id="for-you-pressure" class="priority-badge priority-low">Adaptive</span>
+                    </div>
+                    <div id="for-you-list" class="for-you-list"></div>
+                </div>
+
+                <div id="score-comparison" class="card score-comparison" style="display: none; margin-bottom: 1.5rem;">
+                    <span id="score-comparison-text"></span>
+                </div>
+
+                <div id="missed-tasks-alert" class="card missed-tasks-alert" style="display: none; margin-bottom: 1.5rem;">
+                    <span id="missed-tasks-text"></span>
+                </div>
+
+                <div class="charts-section">
+                    <h2 class="view-subtitle" data-i18n="statistics">Statistics</h2>
+                    <div class="chart-grid">
+                        <div class="chart-container">
+                            <h3 data-i18n="task_distribution">Task Distribution</h3>
+                            <canvas id="task-pie-chart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3 data-i18n="weekly_trend">Weekly Trend</h3>
+                            <canvas id="weekly-trend-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+
+            <!-- Calendar View -->
+            <section id="view-calendar" class="view">
+                <div class="view-header">
+                    <h1 data-i18n="calendar">Calendar</h1>
+                </div>
+                
+                <div class="card calendar-container">
+                    <div class="calendar-header">
+                        <button class="btn secondary" onclick="changeMonth(-1)">❮</button>
+                        <h2 id="calendar-month-year">Month Year</h2>
+                        <button class="btn secondary" onclick="changeMonth(1)">❯</button>
+                    </div>
+                    <div class="calendar-grid" id="calendar-grid">
+                        <!-- Calendar injected here -->
+                    </div>
+                </div>
+
+                <div id="day-tasks-container" class="day-tasks-list" style="margin-top: 2rem;">
+                    <!-- Tasks for selected day injected here -->
+                </div>
+            </section>
+
+
+            <!-- Insights View -->
+            <section id="view-insights" class="view">
+                <div class="view-header">
+                    <h1 data-i18n="insights">Insights</h1>
+                </div>
+                
+                <div id="smart-insights-container" class="insights-container" style="margin-bottom: 2rem;">
+                    <!-- Smart insights will be injected here -->
+                </div>
+
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem;">Goal Analytics</h3>
+                    <div class="weekly-summary-stats">
+                        <div class="weekly-summary-stat">
+                            <span class="label">Completion Rate</span>
+                            <span id="goal-completion-rate" class="value">0%</span>
+                        </div>
+                        <div class="weekly-summary-stat">
+                            <span class="label">Achieved / Failed</span>
+                            <span id="goal-achieved-failed" class="value">0 / 0</span>
+                        </div>
+                        <div class="weekly-summary-stat">
+                            <span class="label">Avg Completion Time</span>
+                            <span id="goal-average-time" class="value">0d</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="insights-container">
+                    <div class="insight-card">
+                        <span class="icon"><i class="fas fa-lightbulb"></i></span>
+                        <div class="insight-content">
+                            <h4 data-i18n="productive_day">Most Productive Day</h4>
+                            <p id="insight-best-day">Analyzing patterns...</p>
+                        </div>
+                    </div>
+                    <div class="insight-card">
+                        <span class="icon"><i class="fas fa-bolt"></i></span>
+                        <div class="insight-content">
+                            <h4 data-i18n="productive_hour">Most Productive Hour</h4>
+                            <p id="insight-best-hour">Analyzing patterns...</p>
+                        </div>
+                    </div>
+                    <div class="insight-card" style="border-left: 4px solid var(--error);">
+                        <span class="icon"><i class="fas fa-exclamation-triangle"></i></span>
+                        <div class="insight-content">
+                            <h4 data-i18n="failure_patterns">Failure Patterns</h4>
+                            <p id="insight-failure-pattern">Analyzing patterns...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 data-i18n="achievements" style="margin-bottom: 1.5rem;">Achievements</h3>
+                    <div id="achievements-list" class="achievements-grid">
+                        <!-- Achievements injected here -->
+                    </div>
+                </div>
+            </section>
+
+
+            <!-- Tasks View -->
+            <section id="view-tasks" class="view">
+                <div class="view-header">
+                    <h1 id="tasks-goals-title" data-i18n="tasks">Tasks</h1>
+                    <button id="tasks-goals-add-btn" onclick="toggleCurrentForm()" class="btn primary" data-i18n="add_new_task">+ Add Task</button>
+                </div>
+
+                <div class="card" style="margin-bottom: 1.5rem;">
+                    <div class="tabs" style="margin: 0;">
+                        <button id="tab-tasks-only" class="tab active" onclick="switchTasksGoalsTab('tasks')" data-i18n="tasks">Tasks</button>
+                        <button id="tab-goals-only" class="tab" onclick="switchTasksGoalsTab('goals')">Goals</button>
+                        <button id="tab-habits-only" class="tab" onclick="switchTasksGoalsTab('habits')">Habits</button>
+                    </div>
+                </div>
+
+                <div id="smart-suggestion-container" style="display: none;"></div>
+
+                <div id="tasks-only-container">
+                    <div class="card" style="margin-bottom: 1.5rem; padding: 1rem;">
+                        <div class="filters-bar">
+                            <select id="filter-priority" onchange="loadTasks()">
+                                <option value="" data-i18n="all">All Priorities</option>
+                                <option value="high" data-i18n="high">High</option>
+                                <option value="medium" data-i18n="medium">Medium</option>
+                                <option value="low" data-i18n="low">Low</option>
+                            </select>
+                            <select id="filter-status" onchange="loadTasks()">
+                                <option value="" data-i18n="all">All Status</option>
+                                <option value="pending" data-i18n="pending">Pending</option>
+                                <option value="completed" data-i18n="completed">Completed</option>
+                                <option value="failed" data-i18n="failed">Failed</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="task-list" class="task-list">
+                        <!-- Tasks injected here -->
+                    </div>
+                </div>
+
+                <div id="goals-only-container" style="display: none;">
+                    <div id="goals-list" class="task-list"></div>
+                </div>
+                <div id="habits-only-container" style="display: none;">
+                    <div id="habits-list" class="task-list"></div>
+                </div>
+            </section>
+
+            <section id="view-goals" class="view">
+                <div class="view-header">
+                    <h1>Goals</h1>
+                    <button onclick="toggleGoalForm()" class="btn primary">+ New Goal</button>
+                </div>
+                <div id="goals-list" class="task-list"></div>
+            </section>
+
+            <!-- Settings View -->
+            <section id="view-settings" class="view">
+                <div class="view-header">
+                    <h1 data-i18n="settings">Settings</h1>
+                </div>
+                
+                <div class="card" style="margin-bottom: 1.25rem;">
+                    <h3 data-i18n="theme" style="margin-bottom: 1rem;">Theme</h3>
+                    <div class="settings-row">
+                        <span data-i18n="toggle_dark">Toggle Dark Mode</span>
+                        <label class="switch">
+                            <input type="checkbox" id="dark-mode-switch" onchange="toggleDarkMode()">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 1.25rem;">
+                    <h3 data-i18n="language" style="margin-bottom: 1rem;">Language</h3>
+                    <select id="lang-selector" onchange="changeLanguage(this.value)">
+                        <option value="en">English</option>
+                        <option value="el">Ελληνικά</option>
+                        <option value="es">Español</option>
+                        <option value="fr">Français</option>
+                        <option value="de">Deutsch</option>
+                        <option value="it">Italiano</option>
+                        <option value="pt">Português</option>
+                    </select>
+                </div>
+
+                <div class="card">
+                    <h3 data-i18n="app_info" style="margin-bottom: 1rem;">App Info</h3>
+                    <p style="margin-bottom: 1rem;"><span data-i18n="version">Version</span>: 3.7.8</p>
+                    <button onclick="forceUpdateApp()" class="btn secondary" style="width: 100%;">Force Update App</button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <div id="task-form-container" class="task-form-modal">
+        <form id="add-task-form">
+            <h3 data-i18n="new_task">New Task</h3>
+            <input type="text" id="task-title" data-i18n="task_placeholder" placeholder="What needs to be done?" required>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label data-i18n="date">Date</label>
+                    <input type="date" id="task-date" required>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="time">Time</label>
+                    <input type="time" id="task-time" required>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label data-i18n="category">Category</label>
+                    <input type="text" id="task-category" placeholder="General" value="General">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="priority">Priority</label>
+                    <select id="task-priority">
+                        <option value="low" data-i18n="low">Low</option>
+                        <option value="medium" data-i18n="medium" selected>Medium</option>
+                        <option value="high" data-i18n="high">High</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:none">
+                <select id="task-difficulty"><option value="medium" selected></option></select>
+                <select id="task-recurring"><option value="none" selected></option></select>
+                <input type="date" id="task-due-date">
+            </div>
+
+            <div class="goal-link-control">
+                <label class="goal-link-toggle">
+                    <input type="checkbox" id="task-link-goal-checkbox" onchange="toggleTaskGoalLink(this.checked)">
+                    <span>Link this task to a goal</span>
+                </label>
+                <select id="task-goal-select" disabled>
+                    <option value="">Select goal</option>
+                </select>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" onclick="toggleTaskForm()" class="btn secondary" data-i18n="cancel">Cancel</button>
+                <button type="submit" class="btn primary" data-i18n="add_task">Add Task</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="goal-form-container" class="task-form-modal">
+        <form id="add-goal-form">
+            <h3>New Goal</h3>
+            <input type="text" id="goal-title" placeholder="Goal title" required>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" id="goal-category" placeholder="General" value="General" required>
+                </div>
+                <div class="form-group">
+                    <label>Goal Type</label>
+                    <select id="goal-type">
+                        <option value="today">Today (Short Length)</option>
+                        <option value="tomorrow">Tomorrow (Short Length)</option>
+                        <option value="three_days">1-3 days (Short Length)</option>
+                        <option value="one_week">1 week (Medium Length)</option>
+                        <option value="two_weeks" selected>1-2 weeks (Medium Length)</option>
+                        <option value="one_month">1 month (Medium Length)</option>
+                        <option value="three_months">3 months (Long Length)</option>
+                        <option value="six_months">6 months (Long Length)</option>
+                        <option value="one_year">1 year (Long Length)</option>
+                        <option value="one_year_plus">1 year+ (Long Length)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Deadline</label>
+                    <select id="goal-deadline-preset" onchange="handleGoalDeadlinePreset()">
+                        <option value="tomorrow">Tomorrow</option>
+                        <option value="week">1 Week</option>
+                        <option value="month">1 Month</option>
+                        <option value="custom">Custom Date</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Custom Deadline</label>
+                    <input type="date" id="goal-custom-deadline" disabled>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="toggleGoalForm()" class="btn secondary">Cancel</button>
+                <button type="submit" class="btn primary">Create Goal</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="habit-form-container" class="task-form-modal">
+        <form id="add-habit-form">
+            <h3>New Habit</h3>
+            <input type="text" id="habit-title" placeholder="Habit title" required>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" id="habit-category" placeholder="General" value="General" required>
+                </div>
+                <div class="form-group">
+                    <label>Preferred Time</label>
+                    <input type="time" id="habit-time">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <select id="habit-frequency" onchange="toggleHabitDaysSelector(this.value)">
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Specific Days</option>
+                    </select>
+                </div>
+                <div id="habit-days-group" class="form-group" style="display:none;">
+                    <label>Days</label>
+                    <div class="habit-days-picker">
+                        <label><input type="checkbox" value="0">Mon</label>
+                        <label><input type="checkbox" value="1">Tue</label>
+                        <label><input type="checkbox" value="2">Wed</label>
+                        <label><input type="checkbox" value="3">Thu</label>
+                        <label><input type="checkbox" value="4">Fri</label>
+                        <label><input type="checkbox" value="5">Sat</label>
+                        <label><input type="checkbox" value="6">Sun</label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="toggleHabitForm()" class="btn secondary">Cancel</button>
+                <button type="submit" class="btn primary">Create Habit</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="goal-reflection-modal" class="task-form-modal">
+        <form id="goal-reflection-form">
+            <h3>Goal Reflection</h3>
+            <div class="form-group">
+                <label>What went well?</label>
+                <textarea id="reflection-went-well" placeholder="Tell us about what worked..." rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>What didn't go well?</label>
+                <textarea id="reflection-didnt-go-well" placeholder="What could be improved..." rows="3"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="button" onclick="closeReflectionModal()" class="btn secondary">Skip</button>
+                <button type="submit" class="btn primary">Save Reflection</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="share-modal" class="task-form-modal">
+        <div class="share-modal-content">
+            <h2 style="margin-bottom: 1rem; text-align: center;">Share Your Progress</h2>
+            
+            <!-- Share Card Preview -->
+            <div id="share-card" class="share-card">
+                <div class="share-card-header">
+                    <img class="share-logo logo" src="/assets/app-logo-20260501.png?v=3" alt="Tobedone">
+                    <h3 id="share-username">Username</h3>
+                </div>
+                <div class="share-card-stats">
+                    <div class="share-stat">
+                        <span class="share-stat-label">Level</span>
+                        <span id="share-level" class="share-stat-value">1</span>
+                    </div>
+                    <div class="share-stat">
+                        <span class="share-stat-label">XP</span>
+                        <span id="share-xp" class="share-stat-value">0</span>
+                    </div>
+                    <div class="share-stat">
+                        <span class="share-stat-label">Streak</span>
+                        <span id="share-streak" class="share-stat-value">0</span>
+                    </div>
+                    <div class="share-stat">
+                        <span class="share-stat-label">Completed Tasks</span>
+                        <span id="share-completed-tasks" class="share-stat-value">0</span>
+                    </div>
+                    <div class="share-stat">
+                        <span class="share-stat-label">Goals Achieved</span>
+                        <span id="share-goals-achieved" class="share-stat-value">0</span>
+                    </div>
+                </div>
+                <div class="share-card-footer">
+                    <span><span style="color: var(--primary);">T</span>obedone</span>
+                </div>
+            </div>
+            
+            <!-- Share Actions -->
+            <div class="share-actions">
+                <button onclick="downloadShareCard()" class="btn primary" style="flex: 1;">
+                    <i class="fas fa-download" style="margin-right: 0.5rem;"></i> Download
+                </button>
+                <button onclick="copyShareText()" class="btn secondary" style="flex: 1;">
+                    <i class="fas fa-copy" style="margin-right: 0.5rem;"></i> Copy Text
+                </button>
+                <button onclick="nativeShare()" class="btn secondary" style="flex: 1;">
+                    <i class="fas fa-share" style="margin-right: 0.5rem;"></i> Share
+                </button>
+            </div>
+            
+            <!-- Profile Link -->
+            <div class="profile-link-section">
+                <label style="margin-bottom: 0.5rem; display: block;">Profile Link</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="profile-link" readonly style="flex: 1; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+                    <button onclick="copyProfileLink()" class="btn secondary">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="form-actions" style="margin-top: 1.5rem;">
+                <button type="button" onclick="closeShareModal()" class="btn secondary" style="width: 100%;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-content">
+            <img class="loading-logo logo" src="/assets/app-logo-20260501.png?v=3" alt="Tobedone logo">
+            <h2 class="loading-title"><span class="brand-t">T</span><span class="brand-rest">obedone</span></h2>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
+    <script src="app.js?v=3.8.5"></script>
+</body>
+</html>
