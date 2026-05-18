@@ -1,8 +1,9 @@
 from datetime import datetime
+from typing import Any
 from sqlalchemy import or_, and_, func, desc
 from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 
 from backend.database import get_db
 from backend.models.user import User
@@ -99,16 +100,21 @@ def get_public_profile(
 
 @router.put("/social/profile")
 def update_social_profile(
-    public_profile: bool | None = None,
-    show_level: bool | None = None,
-    show_streak: bool | None = None,
-    show_xp: bool | None = None,
-    bio: str | None = None,
+    payload: dict[str, Any] = Body(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     profile = get_or_create_social_profile(db, current_user.id)
     
+    name = payload.get("name")
+    public_profile = payload.get("public_profile")
+    show_level = payload.get("show_level")
+    show_streak = payload.get("show_streak")
+    show_xp = payload.get("show_xp")
+    bio = payload.get("bio")
+
+    if name is not None:
+        current_user.name = name.strip() or current_user.name
     if public_profile is not None:
         profile.public_profile = public_profile
     if show_level is not None:
@@ -123,7 +129,7 @@ def update_social_profile(
     db.commit()
     db.refresh(profile)
     
-    return {"message": "Profile updated successfully"}
+    return {"message": "Profile updated successfully", "name": current_user.name}
 
 
 # --- Friendship System ---
