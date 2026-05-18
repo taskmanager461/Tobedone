@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tobedone</title>
-    <link rel="stylesheet" href="styles.css?v=3.8.9">
+    <link rel="stylesheet" href="styles.css?v=3.8.10">
     <link rel="stylesheet" href="/src/styles/logo.css?v=4.5">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" href="/assets/app-logo-20260501.png?v=4">
@@ -160,13 +160,13 @@
                 </div>
             </div>
             <nav class="sidebar-nav">
-                <button class="nav-item active" onclick="showView('reports')">
-                    <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
-                    <span data-i18n="reports">Reports</span>
-                </button>
-                <button class="nav-item" onclick="showView('tasks')">
+                <button class="nav-item active" onclick="showView('tasks')">
                     <span class="nav-icon"><i class="fas fa-tasks"></i></span>
                     <span data-i18n="tasks">Tasks</span>
+                </button>
+                <button class="nav-item" onclick="showView('reports')">
+                    <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
+                    <span data-i18n="reports">Reports</span>
                 </button>
                 <button class="nav-item" onclick="showView('insights')">
                     <span class="nav-icon"><i class="fas fa-chart-bar"></i></span>
@@ -241,6 +241,29 @@
             <section id="view-me" class="view">
                 <div class="view-header">
                     <h1 data-i18n="me">Me</h1>
+                </div>
+
+                <div class="card profile-card" style="margin-bottom: 1.5rem;">
+                    <div class="profile-top">
+                        <div id="profile-avatar" class="profile-avatar">U</div>
+                        <div class="profile-summary">
+                            <h3 id="profile-display-name">User</h3>
+                            <p id="profile-display-username" class="profile-username">@username</p>
+                        </div>
+                    </div>
+                    <div class="profile-form-row">
+                        <label for="profile-name-input">Name</label>
+                        <input id="profile-name-input" type="text" placeholder="Enter your name">
+                    </div>
+                    <div class="profile-form-row">
+                        <label for="profile-username-input">Username</label>
+                        <input id="profile-username-input" type="text" disabled>
+                    </div>
+                    <div class="profile-form-row">
+                        <label for="profile-email-input">Email</label>
+                        <input id="profile-email-input" type="email" disabled>
+                    </div>
+                    <button onclick="saveProfile()" class="btn primary" style="width: 100%; margin-top: 1rem;">Save Profile</button>
                 </div>
 
                 <div class="card identity-card" style="margin-bottom: 1.5rem;">
@@ -717,6 +740,6 @@
 
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=3.8.5"></script>
+    <script src="app.js?v=3.8.10"></script>
 </body>
 </html>
