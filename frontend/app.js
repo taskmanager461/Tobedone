@@ -24,7 +24,7 @@ let currentLang = localStorage.getItem('tm_lang') || 'en';
 let taskChart = null;
 let trendChart = null;
 let insightsChart = null;
-let currentView = 'reports';
+let currentView = 'tasks';
 let cachedTasks = []; // Performance: Cache tasks locally
 let cachedGoals = [];
 let cachedHabits = [];
@@ -736,10 +736,19 @@ function renderApp() {
     smartPersonalizationCache = { timestamp: 0, data: null };
     cachedHabits = [];
     notifiedHabits = new Set();
+    if (supabaseSession?.user?.email) {
+        currentUser.email = supabaseSession.user.email;
+    }
     
     // Initial view
     updateUILanguage();
-    showView('reports');
+    showView('tasks');
+    setTimeout(() => {
+        const taskForm = document.getElementById('task-form-container');
+        if (taskForm && !taskForm.classList.contains('active')) {
+            toggleTaskForm();
+        }
+    }, 300);
 }
 
 function showView(viewId) {
@@ -1419,6 +1428,8 @@ async function loadMe() {
             loadScoreComparison(),
             loadMissedTasks(),
         ]);
+
+        renderProfileSection();
 
         const today = new Date().toISOString().split('T')[0];
         const pieEl = document.getElementById('task-pie-chart');
@@ -2765,6 +2776,53 @@ function renderIdentity(identity) {
         <div class="identity-stat-item"><span class="label">Streak</span><span class="value">${identity.streak}</span></div>
     `;
     badgesEl.innerHTML = identity.badges.map(b => `<span class="identity-badge ${b.unlocked ? 'unlocked' : ''}">${b.label}</span>`).join('');
+}
+
+function renderProfileSection() {
+    if (!currentUser) return;
+    const avatarEl = document.getElementById('profile-avatar');
+    const nameInput = document.getElementById('profile-name-input');
+    const usernameInput = document.getElementById('profile-username-input');
+    const emailInput = document.getElementById('profile-email-input');
+    if (!avatarEl || !nameInput || !usernameInput || !emailInput) return;
+
+    const name = currentUser.name || currentUser.username || '';
+    const username = currentUser.username || '';
+    const email = currentUser.email || supabaseSession?.user?.email || '';
+    const initials = name.split(' ').map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || username.slice(0, 2).toUpperCase();
+    const displayNameEl = document.getElementById('profile-display-name');
+    const displayUsernameEl = document.getElementById('profile-display-username');
+
+    avatarEl.textContent = initials;
+    if (displayNameEl) displayNameEl.textContent = name || 'User';
+    if (displayUsernameEl) displayUsernameEl.textContent = `@${username}`;
+    nameInput.value = name;
+    usernameInput.value = username;
+    emailInput.value = email;
+}
+
+async function saveProfile() {
+    if (!supabaseClient || !currentUser) return;
+    const name = (document.getElementById('profile-name-input')?.value || '').trim();
+    if (!name) {
+        showToast('Name cannot be empty', 'error');
+        return;
+    }
+
+    setAuthBusy(true);
+    try {
+        const { error } = await supabaseClient.auth.updateUser({ data: { name } });
+        if (error) throw error;
+        currentUser.name = name;
+        document.getElementById('user-display-name').textContent = name;
+        renderProfileSection();
+        showToast('Profile saved', 'success');
+    } catch (err) {
+        console.error('Profile update failed', err);
+        showToast(normalizeSupabaseError(err), 'error');
+    } finally {
+        setAuthBusy(false);
+    }
 }
 
 // --- Helpers & Listeners ---
