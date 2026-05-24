@@ -1040,8 +1040,7 @@ body.light-mode #forgot-form select {
     max-height: 100%;
     image-rendering: optimizeQuality;
     mix-blend-mode: screen;
-    background: transparent !important;
-    filter: saturate(1.9) brightness(1.4) contrast(1.05) drop-shadow(0 0 15px var(--icon-glow-strong));
+    filter: saturate(1.9) brightness(1.1) contrast(1.05) drop-shadow(0 0 15px var(--icon-glow-strong));
     position: relative;
     z-index: 1;
 }
@@ -1099,7 +1098,7 @@ body.light-mode .hero-metric-icon img {
     max-height: 100px;
     display: block;
     object-fit: cover;
-    object-position: 10% top;
+    object-position: left top;
     pointer-events: none;
     opacity: 0.98;
     image-rendering: optimizeQuality;
