@@ -3,6 +3,7 @@ import base64
 import os
 from pathlib import Path
 
+@st.cache_data
 def get_base64_image(image_path):
     try:
         if os.path.exists(image_path):
@@ -15,24 +16,30 @@ def get_base64_image(image_path):
 def render_logo(dark_mode: bool) -> None:
     primary_color = "#0a86ff"
     text_color = "#000000" if not dark_mode else "#ffffff"
-    glow_style = f"filter: drop-shadow(0 0 8px {primary_color});" if dark_mode else ""
+    glow_style = f"filter: drop-shadow(0 0 12px {primary_color});" if dark_mode else ""
     
     st.markdown(
         f"""
-        <div style="text-align: center; margin-bottom: 2rem;">
-            <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="{glow_style}">
+        <div style="text-align: center; margin-bottom: 2.5rem; animation: fadeIn 0.8s ease-out;">
+            <svg width="140" height="140" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="{glow_style}">
                 <path d="M30 30 C 30 20, 70 20, 70 30 C 70 35, 55 35, 50 40 L 50 70 C 50 80, 40 80, 40 70 L 40 50 C 40 45, 30 45, 30 40 Z" 
-                    stroke="{primary_color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+                    stroke="{primary_color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M45 45 Q 55 45, 55 55 L 55 70 Q 55 80, 45 80 Q 35 80, 35 70 L 35 60" 
-                    stroke="{primary_color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+                    stroke="{primary_color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
             </svg>
-            <div style="font-size: 2.5rem; font-weight: 800; margin-top: -10px;">
+            <div style="font-size: 3.5rem; font-weight: 900; margin-top: -15px; letter-spacing: -0.05em;">
                 <span style="color: {primary_color};">To</span><span style="color: {text_color};">bedone</span>
             </div>
-            <div style="color: #64748b; font-size: 1rem; font-weight: 500; margin-top: 0.2rem;">
+            <div style="color: #64748b; font-size: 1.2rem; font-weight: 600; margin-top: 0.3rem; letter-spacing: 0.05em;">
                 Plan it. Do it. Done.
             </div>
         </div>
+        <style>
+            @keyframes fadeIn {{
+                from {{ opacity: 0; transform: translateY(-10px); }}
+                to {{ opacity: 1; transform: translateY(0); }}
+            }}
+        </style>
         """,
         unsafe_allow_html=True
     )
@@ -40,6 +47,7 @@ def render_logo(dark_mode: bool) -> None:
 def hero_metrics(score_value: str, score_label: str,
                   streak_value: str, streak_sub: str,
                   success_value: str, success_sub: str) -> None:
+    is_dark = bool(st.session_state.get("dark_mode", True))
     
     # Path setup
     current_file = Path(__file__).resolve()
@@ -97,14 +105,32 @@ def hero_metrics(score_value: str, score_label: str,
     except:
         success_pct = 0.0
 
+    trust_bg = (
+        "radial-gradient(circle at bottom right, #005c99 0%, #004a7a 20%, #003761 40%, #002542 60%, #001221 80%, #000000 100%)"
+        if is_dark
+        else "linear-gradient(135deg, #1e3a8a 0%, #1e40af 40%, #0f172a 100%)"
+    )
+    streak_bg = (
+        "radial-gradient(circle at bottom right, #993d00 0%, #7a3100 20%, #5c2700 40%, #3d1a00 60%, #1f0d00 80%, #000000 100%)"
+        if is_dark
+        else "linear-gradient(135deg, #7c2d12 0%, #9a3412 40%, #1c1917 100%)"
+    )
+    success_bg = (
+        "radial-gradient(circle at bottom right, #009952 0%, #007a42 20%, #005c34 40%, #003d27 60%, #001f1a 80%, #000000 100%)"
+        if is_dark
+        else "linear-gradient(135deg, #14532d 0%, #166534 40%, #052e16 100%)"
+    )
+    track_bg = "rgba(255,255,255,0.1)" if is_dark else "rgba(255,255,255,0.22)"
+    track_border = "rgba(255,255,255,0.2)" if is_dark else "rgba(255,255,255,0.28)"
+
     st.markdown(
         f"""
         <div class="hero-metric-grid">
             <!-- Card 1: Trust Score -->
-            <div class="hero-metric" style="position: relative; border: 1px solid rgba(255,255,255,0.1) !important; isolation: isolate !important; background: radial-gradient(circle at bottom right, #005c99 0%, #004a7a 20%, #003761 40%, #002542 60%, #001221 80%, #000000 100%) !important;">
+            <div class="hero-metric" style="position: relative; isolation: isolate !important; background: {trust_bg} !important;">
                 <div class="hero-metric-content">
-                    <div class="hero-metric-icon" style="background: none !important; border: none !important;">
-                        {f'<img src="data:image/png;base64,{img1}" style="width: 45px; height: 45px; object-fit: contain;">' if img1 else '🎯'}
+                    <div class="hero-metric-icon" style="background: none !important; border: none !important; border-radius: 9999px !important; overflow: hidden !important;">
+                        {f'<img src="data:image/png;base64,{img1}" style="width: 44px; height: 44px; object-fit: contain;">' if img1 else '🎯'}
                     </div>
                     <div class="hero-metric-label" style="color: white !important; font-weight: 700;">Self Trust Score</div>
                     <div class="hero-metric-value" style="color: white !important;">{score_value}</div>
@@ -113,9 +139,9 @@ def hero_metrics(score_value: str, score_label: str,
             </div>
 
             <!-- Card 2: Streak -->
-            <div class="hero-metric" style="border: 1px solid rgba(255,255,255,0.1) !important; isolation: isolate !important; background: radial-gradient(circle at bottom right, #993d00 0%, #7a3100 20%, #5c2700 40%, #3d1a00 60%, #1f0d00 80%, #000000 100%) !important;">
+            <div class="hero-metric" style="isolation: isolate !important; background: {streak_bg} !important;">
                 <div class="hero-metric-content">
-                    <div class="hero-metric-icon" style="background: none !important; border: none !important;">
+                    <div class="hero-metric-icon" style="background: none !important; border: none !important; border-radius: 9999px !important; overflow: hidden !important;">
                         {f'<img src="data:image/png;base64,{img4}" style="width: 45px; height: 45px; object-fit: contain;">' if img4 else '🔥'}
                     </div>
                     <div class="hero-metric-label" style="color: white !important; font-weight: 700;">Current Streak</div>
@@ -124,15 +150,15 @@ def hero_metrics(score_value: str, score_label: str,
             </div>
 
             <!-- Card 3: Success -->
-            <div class="hero-metric" style="border: 1px solid rgba(255,255,255,0.1) !important; isolation: isolate !important; background: radial-gradient(circle at bottom right, #009952 0%, #007a42 20%, #005c34 40%, #003d27 60%, #001f1a 80%, #000000 100%) !important;">
+            <div class="hero-metric" style="isolation: isolate !important; background: {success_bg} !important;">
                 <div class="hero-metric-content">
-                    <div class="hero-metric-icon" style="background: none !important; border: none !important;">
-                        {f'<img src="data:image/png;base64,{img6}" style="width: 45px; height: 45px; object-fit: contain;">' if img6 else '📈'}
+                    <div class="hero-metric-icon" style="background: none !important; border: none !important; border-radius: 9999px !important; overflow: hidden !important;">
+                        {f'<img src="data:image/png;base64,{img6}" style="width: 44px; height: 44px; object-fit: contain;">' if img6 else '📈'}
                     </div>
                     <div class="hero-metric-label" style="color: white !important; font-weight: 700;">Success Rate</div>
                     <div class="hero-metric-value" style="color: white !important;">{success_value}</div>
-                    <div style="margin-top: 40px; width: 100%; background: rgba(255,255,255,0.1); height: 8px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2);">
-                        <div style="width: {success_pct}%; height: 100%; background: #4ade80; box-shadow: 0 0 10px #4ade80; border-radius: 10px;"></div>
+                    <div style="margin-top: 40px; width: 100%; background: {track_bg}; height: 8px; border-radius: 10px; overflow: hidden; border: 1px solid {track_border};">
+                        <div style="width: {success_pct}%; height: 100%; background: #4ade80; box-shadow: none; border-radius: 10px;"></div>
                     </div>
                 </div>
             </div>
@@ -241,6 +267,52 @@ def task_card(task: dict, labels: dict[str, str]) -> None:
         unsafe_allow_html=True,
     )
 
+
+def habit_card(habit: dict) -> None:
+    status = habit.get("today_status")
+    streak = habit.get("streak", 0)
+    consistency = habit.get("consistency_score", 0.0)
+    title = habit.get("title", "Untitled Habit")
+    category = habit.get("category", "general")
+    
+    status_icon = {
+        "completed": "fa-solid fa-check-circle",
+        "skipped": "fa-solid fa-forward",
+        None: "fa-solid fa-circle-dot"
+    }.get(status, "fa-solid fa-circle-dot")
+    
+    status_color = {
+        "completed": "#10b981",
+        "skipped": "#f59e0b",
+        None: "#64748b"
+    }.get(status, "#64748b")
+
+    st.markdown(
+        f"""
+        <div class='surface-card' style='border-left: 5px solid #8b5cf6;'>
+            <div style='display: flex; justify-content: space-between; align-items: center;'>
+                <div>
+                    <div style='font-size: 1.1rem; font-weight: 800; margin-bottom: 0.5rem;'>{title}</div>
+                    <div style='display: flex; gap: 0.5rem; align-items: center;'>
+                        <span class='badge' style='background: rgba(139, 92, 246, 0.1); color: #8b5cf6;'>
+                            🔥 {streak}
+                        </span>
+                        <span class='badge' style='background: rgba(16, 185, 129, 0.1); color: #10b981;'>
+                            {consistency:.0f}% consistency
+                        </span>
+                        <span class='badge' style='background: rgba(100, 116, 139, 0.1); color: #64748b;'>
+                            {category}
+                        </span>
+                    </div>
+                </div>
+                <div style='color: {status_color}; font-size: 1.5rem;'>
+                    <i class="{status_icon}"></i>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 def goal_card(goal: dict) -> None:
     goal_status = goal.get("status", "active")

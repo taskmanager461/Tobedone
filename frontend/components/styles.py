@@ -23,18 +23,18 @@ def get_theme_tokens(dark_mode: bool) -> dict[str, str]:
     return {
         "bg": "#ffffff",
         "surface": "#ffffff",
-        "surface_soft": "#f8fafc",
-        "sidebar": "#f1f5f9",
-        "text": "#0f172a",
-        "muted": "#64748b",
+        "surface_soft": "#f1f5f9",
+        "sidebar": "#f8fafc",
+        "text": "#020617",
+        "muted": "#475569",
         "accent": "#0a86ff",
         "accent_2": "#00d2ff",
         "accent_3": "#0a86ff",
-        "border": "#e2e8f0",
-        "success": "#10b981",
-        "warning": "#f59e0b",
-        "danger": "#ef4444",
-        "shadow": "0 20px 60px rgba(15, 23, 42, 0.08)",
+        "border": "#cbd5e1",
+        "success": "#059669",
+        "warning": "#d97706",
+        "danger": "#dc2626",
+        "shadow": "0 20px 60px rgba(15, 23, 42, 0.12)",
     }
 
 
@@ -53,7 +53,9 @@ def get_theme_css(dark_mode: bool) -> str:
     .stApp {{
         background: {c["bg"]};
         color: {c["text"]};
-        font-family: "Inter", "SF Pro Display", -apple-system, sans-serif;
+        font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }}
 
     /* Global List Style Reset to remove dots/bullets */
@@ -87,26 +89,30 @@ def get_theme_css(dark_mode: bool) -> str:
 
     /* Title Styles */
     .main-title {{
-        font-size: 2.5rem;
-        font-weight: 800;
+        font-size: 3rem;
+        font-weight: 900;
         margin-bottom: 0.5rem;
-        letter-spacing: -0.04em;
+        letter-spacing: -0.05em;
         background: linear-gradient(135deg, {c["accent"]}, {c["accent_3"]});
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }}
     .main-subtitle {{
         color: {c["muted"]};
-        margin-bottom: 2rem;
-        font-weight: 500;
-        font-size: 1rem;
+        margin-bottom: 2.5rem;
+        font-weight: 600;
+        font-size: 1.1rem;
+        letter-spacing: 0.02em;
     }}
     .section-title {{
-        font-size: 1.5rem;
-        font-weight: 800;
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-        letter-spacing: -0.02em;
+        font-size: 0.875rem;
+        font-weight: 400;
+        margin-top: 0.5rem;
+        margin-bottom: 0.25rem;
+        letter-spacing: 0;
+        color: {c["muted"]};
+        opacity: 0.6;
+        text-transform: none;
     }}
 
     /* === COMPLETELY NEW METRIC CARDS === */
@@ -131,9 +137,6 @@ def get_theme_css(dark_mode: bool) -> str:
         display: flex;
         flex-direction: column;
         min-height: 240px;
-        border: none !important;
-        background-color: transparent !important;
-        box-shadow: none !important;
     }}
 
     .hero-metric-bg {{
@@ -157,16 +160,23 @@ def get_theme_css(dark_mode: bool) -> str:
     }}
 
     .hero-metric:hover {{
-        transform: translateY(-8px) scale(1.02);
+        box-shadow: 0 0 32px rgba(10, 134, 255, 0.6), 0 16px 45px rgba(0, 0, 0, 0.6) !important;
     }}
 
     .hero-metric-icon {{
-        width: 50px;
-        height: 50px;
+        width: 64px;
+        height: 64px;
         margin-bottom: 1rem;
         display: flex;
         align-items: center;
         justify-content: center;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        border-radius: 9999px !important;
+        overflow: hidden !important;
     }}
 
     /* === BRAND NEW BADGE IMPLEMENTATION (FROM SCRATCH) === */
@@ -217,15 +227,15 @@ def get_theme_css(dark_mode: bool) -> str:
         backdrop-filter: blur(10px);
     }}
 
-    /* Surface Cards (for tasks, goals, etc.) */
+    /* Surface Cards */
     .surface-card {{
         background: {c["surface"]};
         border: 1px solid {c["border"]};
-        border-radius: 20px;
-        padding: 1.5rem;
+        border-radius: 24px;
+        padding: 1.75rem;
         box-shadow: {c["shadow"]};
-        transition: all 0.3s ease;
-        margin-bottom: 1rem;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        margin-bottom: 1.25rem;
     }}
 
     .surface-card:hover {{
@@ -259,68 +269,33 @@ def get_theme_css(dark_mode: bool) -> str:
 
     /* Auth Styling */
     .auth-card {{
-        max-width: 450px;
+        max-width: 480px;
         margin: 0 auto;
-        padding: 2rem;
+        padding: 2.5rem;
         background: {c["surface"]};
-        border-radius: 24px;
+        border-radius: 32px;
         border: 1px solid {c["border"]};
         box-shadow: {c["shadow"]};
-        min-height: 580px;
+        min-height: 600px;
         display: flex;
         flex-direction: column;
-        overflow: hidden !important;
     }}
 
-    /* Tighten up form spacing to prevent scrolling */
-    [data-testid="stForm"] {{
-        border: none !important;
-        padding: 0 !important;
-    }}
-    [data-testid="stForm"] > div {{
-        gap: 0.5rem !important;
-    }}
-    div[data-testid="stTextInput"] {{
-        margin-bottom: -0.5rem !important;
+    div[data-testid="stTextInput"] label {{
+        color: {c["text"]} !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+        margin-bottom: 0.5rem !important;
     }}
 
-    /* Target Streamlit Tabs */
-    .stTabs [data-baseweb="tab-list"] {{
-        background-color: {c["surface_soft"]};
-        border-radius: 16px;
-        padding: 4px;
-        gap: 4px;
-        border: 1px solid {c["border"]};
-        margin-bottom: 2rem;
-    }}
-    .stTabs [data-baseweb="tab"] {{
-        height: 44px;
-        white-space: pre;
-        background-color: transparent;
-        border-radius: 12px;
-        color: {c["muted"]};
-        font-weight: 600;
-        flex: 1;
-        transition: all 0.3s ease;
-        border: none;
-    }}
-    .stTabs [aria-selected="true"] {{
-        background-color: {c["accent"]} !important;
-        color: white !important;
-        box-shadow: 0 4px 12px {c["accent"]}40;
-    }}
-    .stTabs [data-baseweb="tab-highlight"] {{
-        display: none;
-    }}
-
-    /* Input Fields */
     div[data-testid="stTextInput"] input {{
         background-color: {c["surface_soft"]} !important;
-        border: 1px solid {c["border"]} !important;
-        border-radius: 14px !important;
-        padding: 12px 16px !important;
+        border: 2px solid {c["border"]} !important;
+        border-radius: 16px !important;
+        padding: 14px 18px !important;
         color: {c["text"]} !important;
-        font-size: 1rem !important;
+        font-size: 1.05rem !important;
+        font-weight: 500 !important;
         transition: all 0.3s ease !important;
     }}
     div[data-testid="stTextInput"] input:focus {{

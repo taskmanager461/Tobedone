@@ -24,16 +24,13 @@ let currentLang = localStorage.getItem('tm_lang') || 'en';
 let taskChart = null;
 let trendChart = null;
 let insightsChart = null;
-let currentView = 'tasks';
+let currentView = localStorage.getItem('tm_last_view') || 'tasks';
 let cachedTasks = []; // Performance: Cache tasks locally
 let cachedGoals = [];
 let cachedHabits = [];
 let calendarDate = new Date();
 let calendarTasks = [];
 let dashboardCalendarDate = new Date();
-const apiCache = new Map();
-const CACHE_TTL = 45000; // milliseconds
-
 let notifiedTasks = new Set();
 let notifiedHabits = new Set();
 let currentTasksGoalsTab = 'tasks';
@@ -41,6 +38,8 @@ let currentGoalForReflection = null;
 let identityInitialized = false;
 let identitySnapshot = { level: 1, unlockedBadgeIds: [] };
 let smartPersonalizationCache = { timestamp: 0, data: null };
+let cropper = null;
+let currentCropFile = null;
 
 const translations = {
     en: {
@@ -69,11 +68,14 @@ const translations = {
         update_password: "Update password",
         full_name: "Full Name",
         email: "Email",
+        change_name: "Change Name",
+        change_username: "Change Username",
         create_account: "Create Account",
         dashboard: "Dashboard",
         reports: "Reports",
         me: "Me",
         tasks: "Tasks",
+        insights: "Insights",
         settings: "Settings",
         logout: "Logout",
         trust_score: "Trust Score",
@@ -104,7 +106,6 @@ const translations = {
         overdue: "Overdue",
         all: "All",
         filter_by: "Filter by",
-        insights: "Insights",
         productive_day: "Most Productive Day",
         productive_hour: "Most Productive Hour",
         trends: "Completion Trends",
@@ -166,16 +167,19 @@ const translations = {
         new_password: "Νέος κωδικός",
         confirm_password: "Επιβεβαίωση κωδικού",
         update_password: "Αλλαγή κωδικού",
+        change_name: "Αλλαγή Ονόματος",
+        change_username: "Αλλαγή Username",
         reset_code: "Κωδικός επαναφοράς",
         use_code: "Χρήση κωδικού",
         resend_verification: "Επανάληψη email",
         full_name: "Ονοματεπώνυμο",
         email: "Email",
         create_account: "Δημιουργία Λογαριασμού",
-        dashboard: "Ταμπλό",
+        dashboard: "Πίνακας",
         reports: "Αναφορές",
         me: "Εγώ",
         tasks: "Εργασίες",
+        insights: "Insights",
         settings: "Ρυθμίσεις",
         logout: "Αποσύνδεση",
         trust_score: "Σκορ Εμπιστοσύνης",
@@ -495,18 +499,9 @@ document.addEventListener('DOMContentLoaded', () => {
     initLanguage();
     checkAuth();
     setupEventListeners();
+    initBottomNavDragSwitch();
+    syncBottomNavIndicator(currentView || 'tasks');
 });
-
-function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebar-overlay');
-    const hamburgers = document.querySelectorAll('.hamburger');
-    
-    sidebar.classList.toggle('open');
-    if (overlay) overlay.classList.toggle('active');
-    hamburgers.forEach(h => h.classList.toggle('active'));
-    document.body.classList.toggle('sidebar-open');
-}
 
 function initTheme() {
     // Pro Tech Style: Always dark mode unless explicitly changed
@@ -674,19 +669,61 @@ async function handleAuthSessionChange(event, session) {
         return;
     }
 
-    showLoading(true);
-    try {
-        await withTimeout(syncCurrentUserFromApi(), 8000, 'API timeout');
+    // Only call renderApp() if we're not already in the app
+    // This prevents resetting the view on token refreshes
+    const mainApp = document.getElementById('main-app');
+    const isAlreadyInApp = mainApp && mainApp.classList.contains('active');
+
+    if (!isAlreadyInApp) {
+        // Performance: Optimistic UI - pre-fill currentUser from session metadata
+        const meta = session.user.user_metadata || {};
+        currentUser = {
+            user_id: null, // Don't use UUID here, wait for backend sync
+            email: session.user.email,
+            name: meta.name || meta.full_name || session.user.email.split('@')[0],
+            username: meta.username || session.user.email.split('@')[0],
+            avatar_url: meta.avatar_url || null
+        };
+
+        // Immediately show app with what we have
         renderApp();
+    } else {
+        // Just update the currentUser data without re-rendering the whole app
+        const meta = session.user.user_metadata || {};
+        if (!currentUser) {
+            currentUser = {
+                user_id: null,
+                email: session.user.email,
+                name: meta.name || meta.full_name || session.user.email.split('@')[0],
+                username: meta.username || session.user.email.split('@')[0],
+                avatar_url: meta.avatar_url || null
+            };
+        } else {
+            currentUser.email = session.user.email;
+            currentUser.name = meta.name || meta.full_name || session.user.email.split('@')[0];
+            currentUser.username = meta.username || session.user.email.split('@')[0];
+            currentUser.avatar_url = meta.avatar_url || null;
+        }
+    }
+
+    // Then sync in background to get full profile
+    try {
+        await syncCurrentUserFromApi();
+        // Update UI if anything changed after sync
+        const userNameEl = document.getElementById('user-display-name');
+        if (userNameEl) userNameEl.textContent = currentUser.name || currentUser.username;
+        renderProfileCard();
     } catch (err) {
-        await supabaseClient?.auth?.signOut();
-        currentUser = null;
-        supabaseSession = null;
-        supabaseAccessToken = null;
-        renderLogin();
-        setAuthView('login');
-    } finally {
-        showLoading(false);
+        console.error('Background sync failed', err);
+        // If it failed because session is invalid, then logout
+        if (err.message === 'Session expired') {
+            await supabaseClient?.auth?.signOut();
+            currentUser = null;
+            supabaseSession = null;
+            supabaseAccessToken = null;
+            renderLogin();
+            setAuthView('login');
+        }
     }
 }
 
@@ -718,6 +755,59 @@ async function checkAuth() {
 }
 
 // --- UI Navigation ---
+let lastScrollTop = 0;
+const scrollThreshold = 3;
+let scrollRafId = 0;
+let pendingScrollTop = 0;
+let pendingMaxScroll = 0;
+
+function updateScrollProgressFromMetrics(scrollTop, maxScroll) {
+    const fill = document.getElementById('scroll-progress-fill');
+    if (!fill) return;
+    const ratio = maxScroll > 0 ? (scrollTop / maxScroll) : 0;
+    const clamped = Math.max(0, Math.min(1, ratio));
+    fill.style.transform = `scaleX(${clamped})`;
+}
+
+function updateScrollProgress(scrollEl) {
+    if (!scrollEl) return;
+    const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+    updateScrollProgressFromMetrics(scrollEl.scrollTop, maxScroll);
+}
+
+function getWindowScrollMetrics() {
+    const doc = document.documentElement;
+    const scrollTop = window.scrollY || doc.scrollTop || document.body.scrollTop || 0;
+    const maxScroll = Math.max(0, doc.scrollHeight - doc.clientHeight);
+    return { scrollTop, maxScroll };
+}
+
+function applyScrollUI(scrollTop, maxScroll) {
+    // Keep top bar always visible - no scrolling behavior
+}
+
+function scheduleScrollUI(scrollTop, maxScroll) {
+    pendingScrollTop = scrollTop;
+    pendingMaxScroll = maxScroll;
+    if (scrollRafId) return;
+    scrollRafId = requestAnimationFrame(() => {
+        scrollRafId = 0;
+        applyScrollUI(pendingScrollTop, pendingMaxScroll);
+    });
+}
+
+function handleWindowScroll() {
+    const { scrollTop, maxScroll } = getWindowScrollMetrics();
+    scheduleScrollUI(scrollTop, maxScroll);
+}
+
+function handleContentScroll(e) {
+    const el = e.target;
+    const scrollTop = el.scrollTop;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    scheduleScrollUI(scrollTop, maxScroll);
+}
+
 function renderLogin() {
     document.getElementById('auth-page').classList.add('active');
     document.getElementById('main-app').classList.remove('active');
@@ -730,29 +820,184 @@ function renderApp() {
     document.getElementById('auth-page').classList.remove('active');
     document.getElementById('main-app').classList.add('active');
     document.body.style.overflow = '';
-    document.getElementById('user-display-name').textContent = currentUser.name || currentUser.username;
+    
+    // Perceived speed: render identity from currentUser first
+    const displayName = currentUser.name || currentUser.username;
+    const nameEl = document.getElementById('user-display-name');
+    if (nameEl) nameEl.textContent = displayName;
+    
     identityInitialized = false;
     identitySnapshot = { level: 1, unlockedBadgeIds: [] };
     smartPersonalizationCache = { timestamp: 0, data: null };
     cachedHabits = [];
     notifiedHabits = new Set();
-    if (supabaseSession?.user?.email) {
-        currentUser.email = supabaseSession.user.email;
-    }
     
-    // Initial view
     updateUILanguage();
-    showView('tasks');
-    setTimeout(() => {
-        const taskForm = document.getElementById('task-form-container');
-        if (taskForm && !taskForm.classList.contains('active')) {
-            toggleTaskForm();
-        }
-    }, 300);
+    renderProfileCard();
+    
+    // BUG FIX: Only redirect to tasks if we don't have a current view set
+    // or if we're coming from the login screen
+    if (!currentView || currentView === 'tasks') {
+        showView('tasks');
+    } else {
+        showView(currentView);
+    }
+}
+
+function renderProfileCard() {
+    const name = (currentUser?.name || currentUser?.username || 'User').trim();
+    const username = (currentUser?.username || 'user').trim();
+    const avatarUrl = (currentUser?.avatar_url || '').trim();
+
+    const avatarEl = document.getElementById('profile-avatar');
+    if (avatarEl) {
+        // Only use fallback if avatarUrl is truly empty
+        avatarEl.src = avatarUrl ? avatarUrl : `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0a86ff&color=fff&size=128&bold=true`;
+    }
+
+    const nameEl = document.getElementById('profile-name');
+    if (nameEl) nameEl.textContent = name;
+
+    const usernameEl = document.getElementById('profile-username');
+    if (usernameEl) usernameEl.textContent = `@${username}`;
+
+    const nameInput = document.getElementById('profile-name-input');
+    if (nameInput && document.activeElement !== nameInput) {
+        nameInput.value = name;
+        nameInput.setAttribute('readonly', true);
+        nameInput.classList.remove('editable');
+    }
+
+    const usernameInput = document.getElementById('profile-username-input');
+    if (usernameInput && document.activeElement !== usernameInput) {
+        usernameInput.value = username;
+        usernameInput.setAttribute('readonly', true);
+        usernameInput.classList.remove('editable');
+    }
+
+    updateProfileSaveState();
+}
+
+let profileDraft = { name: null, username: null, avatar_url: null };
+
+function hasProfileChanges() {
+    const currentName = (currentUser?.name || '').trim();
+    const currentUsername = (currentUser?.username || '').trim();
+    const currentAvatar = (currentUser?.avatar_url || '').trim();
+    const draftName = (profileDraft.name ?? currentName).trim();
+    const draftUsername = (profileDraft.username ?? currentUsername).trim();
+    const draftAvatar = (profileDraft.avatar_url ?? currentAvatar).trim();
+    return draftName !== currentName || draftUsername !== currentUsername || draftAvatar !== currentAvatar;
+}
+
+function updateProfileSaveState() {
+    const btn = document.getElementById('profile-save-btn');
+    const cancelBtn = document.getElementById('profile-cancel-btn');
+    if (!btn || !cancelBtn) return;
+    const changed = hasProfileChanges();
+    btn.style.display = 'block'; // Always show
+    btn.disabled = !changed;
+    cancelBtn.style.display = 'block'; // Always show
+    cancelBtn.disabled = !changed;
+}
+
+async function compressImageToDataUrl(file, size = 256, quality = 0.85) {
+    const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Failed to read image'));
+        reader.readAsDataURL(file);
+    });
+
+    const img = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Invalid image'));
+        image.src = dataUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0a86ff';
+    ctx.fillRect(0, 0, size, size);
+
+    const minSide = Math.min(img.width, img.height);
+    const sx = Math.floor((img.width - minSide) / 2);
+    const sy = Math.floor((img.height - minSide) / 2);
+    ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+
+    return canvas.toDataURL('image/jpeg', quality);
+}
+
+function cancelProfileChanges() {
+    profileDraft = { name: null, username: null, avatar_url: null };
+    renderProfileCard();
+    const fileInput = document.getElementById('profile-avatar-input');
+    if (fileInput) fileInput.value = '';
+    updateProfileSaveState();
+}
+
+async function updateProfile(name, username) {
+    const payload = {};
+    const newName = (name || '').trim();
+    const newUsername = (username || '').trim();
+    const newAvatar = (profileDraft.avatar_url || '').trim();
+
+    if (!newName || !newUsername) {
+        throw new Error('Name and username cannot be empty');
+    }
+
+    // Always include values in payload if they are changed or if we want to force update
+    if (newName !== (currentUser?.name || '').trim()) payload.name = newName;
+    if (newUsername !== (currentUser?.username || '').trim()) payload.username = newUsername;
+    
+    // CRITICAL: Handle avatar_url specifically
+    if (profileDraft.avatar_url !== null) {
+        payload.avatar_url = newAvatar; // This is the Base64 from the cropper
+    }
+
+    if (Object.keys(payload).length === 0) {
+        return { name: currentUser?.name, username: currentUser?.username, avatar_url: currentUser?.avatar_url };
+    }
+
+    const result = await apiFetch('/identity/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+    });
+
+    // Update LOCAL state immediately
+    currentUser.name = result.name;
+    currentUser.username = result.username;
+    currentUser.avatar_url = result.avatar_url || null;
+
+    // Force update UI elements
+    const headerName = document.getElementById('user-display-name');
+    if (headerName) headerName.textContent = currentUser.name || currentUser.username;
+
+    // Reset draft and re-render
+    profileDraft = { name: null, username: null, avatar_url: null };
+    renderProfileCard();
+    updateProfileSaveState();
+    
+    // Update Supabase metadata as well so it persists across sessions
+    if (supabaseClient) {
+        await supabaseClient.auth.updateUser({
+            data: { 
+                name: currentUser.name,
+                username: currentUser.username,
+                avatar_url: currentUser.avatar_url 
+            }
+        });
+    }
+
+    return result;
 }
 
 function showView(viewId) {
     currentView = viewId;
+    localStorage.setItem('tm_last_view', viewId);
     
     // UI Update
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -767,16 +1012,28 @@ function showView(viewId) {
             item.classList.remove('active');
         }
     });
-
-    // Close mobile sidebar if open
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar && sidebar.classList.contains('open')) {
-        toggleSidebar();
-    }
+    syncBottomNavIndicator(viewId);
 
     // Scroll content to top
     const content = document.getElementById('content');
-    if (content) content.scrollTop = 0;
+    if (content) {
+        content.scrollTop = 0;
+        window.scrollTo(0, 0);
+        lastScrollTop = 0;
+        const topBar = document.querySelector('.top-bar');
+        if (topBar) topBar.classList.remove('hidden');
+        updateScrollProgress(content);
+        // Attach scroll listener once
+        if (!content.dataset.scrollBound) {
+            content.addEventListener('scroll', handleContentScroll);
+            content.dataset.scrollBound = "true";
+        }
+    }
+
+    if (!document.body.dataset.windowScrollBound) {
+        window.addEventListener('scroll', handleWindowScroll, { passive: true });
+        document.body.dataset.windowScrollBound = "true";
+    }
 
     // Load Data
     if (viewId === 'reports') loadReports();
@@ -791,10 +1048,210 @@ function showView(viewId) {
     if (viewId === 'settings') applyTheme(); // Sync theme switch state
 }
 
+function getBottomNavViewOrder() {
+    const nav = document.querySelector('.bottom-nav');
+    if (!nav) return [];
+    const items = Array.from(nav.querySelectorAll('.nav-item'));
+    const order = [];
+    for (const item of items) {
+        const handler = item.getAttribute('onclick') || '';
+        const match = handler.match(/showView\('([^']+)'\)/);
+        if (match && match[1]) order.push(match[1]);
+    }
+    return order;
+}
+
+function ensureBottomNavIndicator() {
+    const nav = document.querySelector('.bottom-nav');
+    if (!nav) return null;
+    let indicator = nav.querySelector('.nav-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.className = 'nav-indicator';
+        indicator.setAttribute('aria-hidden', 'true');
+        const glow = nav.querySelector('.bottom-nav-glow');
+        if (glow && glow.nextSibling) {
+            nav.insertBefore(indicator, glow.nextSibling);
+        } else {
+            nav.insertBefore(indicator, nav.firstChild);
+        }
+    }
+    nav.classList.add('has-indicator');
+    return indicator;
+}
+
+function setBottomNavIndicatorOffset(nav, indicator, offsetPx) {
+    indicator.style.transform = `translate(-50%, -50%) translateX(${offsetPx}px)`;
+    nav.classList.add('has-indicator');
+}
+
+function syncBottomNavIndicator(viewId) {
+    const nav = document.querySelector('.bottom-nav');
+    if (!nav) return;
+    const indicator = ensureBottomNavIndicator();
+    if (!indicator) return;
+    const items = Array.from(nav.querySelectorAll('.nav-item'));
+    const targetItem = items.find(item => (item.getAttribute('onclick') || '').includes(`'${viewId}'`));
+    if (!targetItem) return;
+    const navRect = nav.getBoundingClientRect();
+    const itemRect = targetItem.getBoundingClientRect();
+    const centerX = (itemRect.left + itemRect.right) / 2;
+    const offset = centerX - (navRect.left + navRect.width / 2);
+    setBottomNavIndicatorOffset(nav, indicator, offset);
+}
+
+function initBottomNavDragSwitch() {
+    const nav = document.querySelector('.bottom-nav');
+    if (!nav) return;
+    if (nav.dataset.dragSwitchInit === 'true') return;
+    nav.dataset.dragSwitchInit = 'true';
+
+    const indicator = ensureBottomNavIndicator();
+    let viewOrder = getBottomNavViewOrder();
+
+    let startX = 0;
+    let startY = 0;
+    let pointerId = null;
+    let dragging = false;
+    let blockClickUntil = 0;
+    let rafId = 0;
+    let pendingX = 0;
+    let pendingY = 0;
+
+    function isMobile() {
+        return window.innerWidth <= 768;
+    }
+
+    function computeNearestIndex(clientX) {
+        const items = Array.from(nav.querySelectorAll('.nav-item'));
+        const centers = items.map(item => {
+            const r = item.getBoundingClientRect();
+            return (r.left + r.right) / 2;
+        });
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < centers.length; i++) {
+            const d = Math.abs(centers[i] - clientX);
+            if (d < bestDist) {
+                bestDist = d;
+                bestIdx = i;
+            }
+        }
+        return bestIdx;
+    }
+
+    function updateIndicatorFromClientX(clientX) {
+        if (!indicator) return;
+        const navRect = nav.getBoundingClientRect();
+        const clampedX = Math.max(navRect.left, Math.min(navRect.right, clientX));
+        const offset = clampedX - (navRect.left + navRect.width / 2);
+        setBottomNavIndicatorOffset(nav, indicator, offset);
+    }
+
+    function scheduleMove(clientX, clientY) {
+        pendingX = clientX;
+        pendingY = clientY;
+        if (rafId) return;
+        rafId = requestAnimationFrame(() => {
+            rafId = 0;
+            handleMoveFrame(pendingX, pendingY);
+        });
+    }
+
+    function handleMoveFrame(clientX, clientY) {
+        const dx = clientX - startX;
+        const dy = clientY - startY;
+
+        if (!dragging) {
+            if (Math.abs(dx) > 5 && Math.abs(dx) > Math.abs(dy) * 0.8) { // Lower threshold for faster drag
+                dragging = true;
+                nav.classList.add('is-dragging');
+            } else {
+                return;
+            }
+        }
+
+        updateIndicatorFromClientX(clientX);
+
+        const idx = computeNearestIndex(clientX);
+        const nextView = viewOrder[idx];
+        if (nextView && nextView !== currentView) {
+            showView(nextView);
+        }
+    }
+
+    nav.addEventListener('pointerdown', (e) => {
+        if (!isMobile()) return;
+        if (e.pointerType !== 'touch') return;
+        pointerId = e.pointerId;
+        startX = e.clientX;
+        startY = e.clientY;
+        dragging = false;
+        try { nav.setPointerCapture(pointerId); } catch (_) {}
+    }, { passive: true });
+
+    nav.addEventListener('pointermove', (e) => {
+        if (!isMobile()) return;
+        if (pointerId === null || e.pointerId !== pointerId) return;
+        scheduleMove(e.clientX, e.clientY);
+        if (dragging) e.preventDefault();
+    }, { passive: false });
+
+    function endPointer(e) {
+        if (pointerId === null || e.pointerId !== pointerId) return;
+        pointerId = null;
+        if (dragging) {
+            blockClickUntil = Date.now() + 350;
+            nav.classList.remove('is-dragging');
+            syncBottomNavIndicator(currentView);
+        }
+        dragging = false;
+    }
+
+    nav.addEventListener('pointerup', endPointer, { passive: true });
+    nav.addEventListener('pointercancel', endPointer, { passive: true });
+
+    nav.addEventListener('click', (e) => {
+        if (!isMobile()) return;
+        if (Date.now() < blockClickUntil) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }, true);
+
+    window.addEventListener('resize', () => {
+        viewOrder = getBottomNavViewOrder();
+        syncBottomNavIndicator(currentView);
+    });
+}
+
+function focusInput(id) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function enableEdit(id) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.removeAttribute('readonly');
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Optional: add a class to show it's editable
+        el.classList.add('editable');
+    }
+}
+
 
 async function loadInsights() {
     try {
-        const history = await apiFetch(`/score/history?user_id=${currentUser.user_id}&days=30`);
+        let url = `/score/history?days=30`;
+        if (currentUser.user_id && Number.isInteger(currentUser.user_id)) {
+            url += `&user_id=${currentUser.user_id}`;
+        }
+        const history = await apiFetch(url);
         renderInsights(history);
     } catch (err) {
         console.error('Insights load failed', err);
@@ -1048,26 +1505,16 @@ showView = function(viewId) {
 async function apiFetch(endpoint, options = {}) {
     // Ensure endpoint starts with /api/ if it doesn't already
     const apiEndpoint = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`;
-    const method = (options.method || 'GET').toUpperCase();
-    const body = typeof options.body === 'string' ? options.body : options.body ? JSON.stringify(options.body) : null;
-    const cacheKey = `${apiEndpoint}::${method}::${body || ''}`;
-
+    
     options.headers = {
         ...options.headers,
         'Content-Type': 'application/json'
     };
-
+    
     if (supabaseAccessToken) {
         options.headers['Authorization'] = `Bearer ${supabaseAccessToken}`;
     }
-
-    if (method === 'GET' && !body) {
-        const cached = apiCache.get(cacheKey);
-        if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-            return JSON.parse(JSON.stringify(cached.data));
-        }
-    }
-
+    
     try {
         const response = await fetch(`${API_BASE_URL}${apiEndpoint}`, options);
         if (response.status === 401) {
@@ -1077,6 +1524,7 @@ async function apiFetch(endpoint, options = {}) {
         }
         if (!response.ok) {
             const error = await response.json();
+            // Handle Pydantic validation errors
             let message = t('error_occurred');
             if (typeof error.detail === 'string') {
                 message = error.detail;
@@ -1085,13 +1533,7 @@ async function apiFetch(endpoint, options = {}) {
             }
             throw new Error(message);
         }
-        const data = await response.json();
-        if (method === 'GET' && !body) {
-            apiCache.set(cacheKey, { timestamp: Date.now(), data });
-        } else {
-            apiCache.clear();
-        }
-        return data;
+        return response.json();
     } catch (err) {
         if (err.message !== 'Session expired') {
             showToast(err.message, 'error');
@@ -1288,7 +1730,7 @@ async function updatePassword(newPassword, confirmPassword) {
 }
 
 function resetUiToDefaults() {
-    currentView = 'reports';
+    currentView = 'tasks';
     currentTasksGoalsTab = 'tasks';
     calendarDate = new Date();
     dashboardCalendarDate = new Date();
@@ -1351,7 +1793,7 @@ function getBadgeImageSrc(scoreClass) {
         low: 'badge_low.png',
     };
     const name = map[scoreClass] || map.low;
-    return `/static/${name}?v=1`;
+    return `/static/${name}?v=7`;
 }
 
 // --- Reports & Me Logic ---
@@ -1370,7 +1812,6 @@ async function loadReports() {
         await calendarPromise;
 
         renderHeroMetrics(score);
-        renderSeriesTable(score);
 
         const progressFill = document.getElementById('daily-progress-fill');
         if (progressFill) progressFill.style.width = `${score.success_rate * 100}%`;
@@ -1391,57 +1832,35 @@ async function loadReports() {
     }
 }
 
-function renderSeriesTable(score) {
-    const container = document.getElementById('reports-score-table');
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="report-summary-card">
-            <h3>Score Snapshot</h3>
-            <div class="report-summary-grid">
-                <div class="summary-item">
-                    <span class="label">Series</span>
-                    <strong>${score.streak}</strong>
-                </div>
-                <div class="summary-item">
-                    <span class="label">Trust Score</span>
-                    <strong>${score.score.toFixed(1)}</strong>
-                </div>
-                <div class="summary-item">
-                    <span class="label">Daily Progress</span>
-                    <strong>${Math.round(score.success_rate * 100)}%</strong>
-                </div>
-                <div class="summary-item">
-                    <span class="label">Today’s Tasks</span>
-                    <strong>${score.total_tasks || 0}</strong>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
 async function loadMe() {
     try {
-        await Promise.all([
+        renderProfileCard();
+        
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Parallelize everything
+        const promises = [
             loadIdentityProfile(),
             loadDashboardPersonalization(),
             loadScoreComparison(),
-            loadMissedTasks(),
-        ]);
+            loadMissedTasks()
+        ];
 
-        renderProfileSection();
-
-        const today = new Date().toISOString().split('T')[0];
         const pieEl = document.getElementById('task-pie-chart');
         if (pieEl) {
-            const tasks = await apiFetch(`/tasks?user_id=${currentUser.user_id}&day=${today}`);
-            updateTaskChart(tasks);
+            let tasksUrl = `/tasks?day=${today}`;
+            if (currentUser.user_id && Number.isInteger(currentUser.user_id)) {
+                tasksUrl += `&user_id=${currentUser.user_id}`;
+            }
+            promises.push(apiFetch(tasksUrl).then(tasks => updateTaskChart(tasks)));
         }
 
         const trendEl = document.getElementById('weekly-trend-chart');
         if (trendEl) {
-            await loadWeeklyTrend();
+            promises.push(loadWeeklyTrend());
         }
+
+        await Promise.all(promises);
     } catch (err) {
         console.error('Me load failed', err);
     }
@@ -1457,29 +1876,43 @@ function renderHeroMetrics(score) {
 
     const label = getScoreLabel(score.score);
     const scoreVal = score.score.toFixed(1);
+    const isLightMode = document.body.classList.contains('light-mode');
     
     // Use pre-loaded Base64 assets
     const img1 = ASSETS.img1;
     const img4 = ASSETS.img4;
     const img6 = ASSETS.img6;
 
+    const trustBg = isLightMode
+        ? 'linear-gradient(135deg, #bfdbfe 0%, #2563eb 30%, #1e293b 100%)'
+        : 'radial-gradient(circle at bottom right, #005c99 0%, #004a7a 20%, #003761 40%, #002542 60%, #001221 80%, #000000 100%)';
+
+    const streakBg = isLightMode
+        ? 'linear-gradient(135deg, #fed7aa 0%, #ea580c 30%, #451a03 100%)'
+        : 'radial-gradient(circle at bottom right, #993d00 0%, #7a3100 20%, #5c2700 40%, #3d1a00 60%, #1f0d00 80%, #000000 100%)';
+
+    const successBg = isLightMode
+        ? 'linear-gradient(135deg, #bbf7d0 0%, #16a34a 30%, #052e16 100%)'
+        : 'radial-gradient(circle at bottom right, #009952 0%, #007a42 20%, #005c34 40%, #003d27 60%, #001f1a 80%, #000000 100%)';
+
+    const progressTrackBg = isLightMode ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.1)';
+    const progressTrackBorder = isLightMode ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.2)';
+
     container.innerHTML = `
         <!-- Card 1: Trust Score -->
-        <div class="hero-metric" style="background: radial-gradient(circle at bottom right, #005c99 0%, #004a7a 20%, #003761 40%, #002542 60%, #001221 80%, #000000 100%) !important; isolation: isolate !important; border: 1px solid rgba(255,255,255,0.1) !important; box-shadow: none !important;">
+        <div class="hero-metric hero-metric--trust" style="background: ${trustBg} !important; isolation: isolate !important;">
             <div class="hero-metric-content">
                 <div class="hero-metric-icon">
                     <img src="${img1}">
                 </div>
                 <div class="hero-metric-label">Self Trust Score</div>
                 <div class="hero-metric-value">${scoreVal}</div>
-                <div class="trust-score-badge-wrap" aria-label="${label.text}">
-                    <img class="trust-score-badge" src="${getBadgeImageSrc(label.class)}" alt="${label.text}">
-                </div>
+                <img class="trust-score-badge" src="${getBadgeImageSrc(label.class)}" alt="${label.text}">
             </div>
         </div>
 
         <!-- Card 2: Streak -->
-        <div class="hero-metric" style="background: radial-gradient(circle at bottom right, #993d00 0%, #7a3100 20%, #5c2700 40%, #3d1a00 60%, #1f0d00 80%, #000000 100%) !important; isolation: isolate !important; border: 1px solid rgba(255,255,255,0.1) !important; box-shadow: none !important;">
+        <div class="hero-metric" style="background: ${streakBg} !important; isolation: isolate !important;">
             <div class="hero-metric-content">
                 <div class="hero-metric-icon">
                     <img src="${img4}">
@@ -1490,15 +1923,15 @@ function renderHeroMetrics(score) {
         </div>
 
         <!-- Card 3: Success -->
-        <div class="hero-metric" style="background: radial-gradient(circle at bottom right, #009952 0%, #007a42 20%, #005c34 40%, #003d27 60%, #001f1a 80%, #000000 100%) !important; isolation: isolate !important; border: 1px solid rgba(255,255,255,0.1) !important; box-shadow: none !important;">
+        <div class="hero-metric" style="background: ${successBg} !important; isolation: isolate !important;">
             <div class="hero-metric-content">
                 <div class="hero-metric-icon">
                     <img src="${img6}">
                 </div>
                 <div class="hero-metric-label">Success Rate</div>
                 <div class="hero-metric-value">${(score.success_rate * 100).toFixed(0)}%</div>
-                <div style="margin-top: 40px; width: 100%; background: rgba(255,255,255,0.1); height: 8px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2);">
-                    <div style="width: ${score.success_rate * 100}%; height: 100%; background: #4ade80; box-shadow: 0 0 10px #4ade80; border-radius: 10px;"></div>
+                <div style="margin-top: 40px; width: 100%; background: ${progressTrackBg}; height: 8px; border-radius: 10px; overflow: hidden; border: 1px solid ${progressTrackBorder};">
+                    <div style="width: ${score.success_rate * 100}%; height: 100%; background: #4ade80; box-shadow: none; border-radius: 10px;"></div>
                 </div>
             </div>
         </div>
@@ -1585,7 +2018,11 @@ async function loadMissedTasks() {
             let message = `You missed ${data.count} task${data.count > 1 ? 's' : ''}`;
             
             const today = new Date().toISOString().split('T')[0];
-            const todayTasks = await apiFetch(`/tasks?user_id=${currentUser.user_id}&day=${today}`);
+            let url = `/tasks?day=${today}`;
+            if (currentUser.user_id && Number.isInteger(currentUser.user_id)) {
+                url += `&user_id=${currentUser.user_id}`;
+            }
+            const todayTasks = await apiFetch(url);
             const hasCompletedToday = todayTasks.some(t => t.status === 'completed');
             const streakValue = parseInt(document.getElementById('streak-value').textContent) || 0;
             
@@ -1684,7 +2121,11 @@ async function loadInsights() {
 
 async function loadWeeklyTrend() {
     try {
-        const scores = await apiFetch(`/score/history?user_id=${currentUser.user_id}&days=7`);
+        let url = `/score/history?days=7`;
+        if (currentUser.user_id && Number.isInteger(currentUser.user_id)) {
+            url += `&user_id=${currentUser.user_id}`;
+        }
+        const scores = await apiFetch(url);
         updateTrendChart(scores);
     } catch (err) {
         console.error('Trend load failed', err);
@@ -1698,11 +2139,23 @@ function updateTrendChart(history) {
     const labels = history.map(s => s.date.split('-').slice(1).reverse().join('/'));
     const data = history.map(s => s.score);
 
+    const rootStyles = getComputedStyle(document.documentElement);
+    const primary = rootStyles.getPropertyValue('--primary').trim() || '#0066FF';
+    const primary2 = rootStyles.getPropertyValue('--primary-2').trim() || primary;
+    const primary3 = rootStyles.getPropertyValue('--primary-3').trim() || primary;
+
     const textColor = isDarkMode ? '#FFFFFF' : '#0F172A';
     const bgColor = isDarkMode ? '#111827' : '#FFFFFF';
     const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
-    const lineColor = '#0066FF';
-    const fillColor = isDarkMode ? 'rgba(0, 102, 255, 0.15)' : 'rgba(0, 102, 255, 0.1)';
+    const stroke = ctx.createLinearGradient(0, 0, 420, 0);
+    stroke.addColorStop(0, primary2);
+    stroke.addColorStop(0.5, primary);
+    stroke.addColorStop(1, primary3);
+    const gradient = ctx.createLinearGradient(0, 0, 0, 280);
+    gradient.addColorStop(0, isDarkMode ? 'rgba(34, 211, 238, 0.22)' : 'rgba(34, 211, 238, 0.16)');
+    gradient.addColorStop(0.45, isDarkMode ? 'rgba(10, 134, 255, 0.16)' : 'rgba(10, 134, 255, 0.12)');
+    gradient.addColorStop(1, isDarkMode ? 'rgba(167, 139, 250, 0.05)' : 'rgba(167, 139, 250, 0.03)');
+    const fillColor = gradient;
 
     trendChart = new Chart(ctx, {
         type: 'line',
@@ -1711,14 +2164,15 @@ function updateTrendChart(history) {
             datasets: [{
                 label: t('trust_score'),
                 data: data,
-                borderColor: lineColor,
+                borderColor: stroke,
                 backgroundColor: fillColor,
                 fill: true,
                 tension: 0.35,
                 pointRadius: 5,
-                pointBackgroundColor: lineColor,
+                pointBackgroundColor: primary2,
                 pointBorderColor: bgColor,
                 pointBorderWidth: 3,
+                pointHoverBackgroundColor: primary3,
                 pointHoverRadius: 7
             }]
         },
@@ -1770,7 +2224,7 @@ function updateTaskChart(tasks) {
     const textColor = isDarkMode ? '#FFFFFF' : '#0F172A';
     const bgColor = isDarkMode ? '#111827' : '#FFFFFF';
     const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
-    const pendingColor = isDarkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)';
+    const pendingColor = isDarkMode ? 'rgba(10, 134, 255, 0.14)' : 'rgba(10, 134, 255, 0.10)';
 
     taskChart = new Chart(ctx, {
         type: 'doughnut',
@@ -1778,7 +2232,7 @@ function updateTaskChart(tasks) {
             labels: [t('completed'), t('failed'), t('pending')],
             datasets: [{
                 data: [counts.completed, counts.failed, counts.pending],
-                backgroundColor: ['#10B981', '#EF4444', pendingColor],
+                backgroundColor: ['#22c55e', '#ef4444', pendingColor],
                 borderWidth: 4,
                 borderColor: bgColor,
                 hoverOffset: 10
@@ -1835,7 +2289,10 @@ async function loadTasks() {
         const priority = document.getElementById('filter-priority').value;
         const status = document.getElementById('filter-status').value;
         
-        let url = `/tasks?user_id=${currentUser.user_id}&day=${today}`;
+        let url = `/tasks?day=${today}`;
+        if (currentUser.user_id && Number.isInteger(currentUser.user_id)) {
+            url += `&user_id=${currentUser.user_id}`;
+        }
         if (priority) url += `&priority=${priority}`;
         if (status) url += `&status=${status}`;
 
@@ -2778,53 +3235,6 @@ function renderIdentity(identity) {
     badgesEl.innerHTML = identity.badges.map(b => `<span class="identity-badge ${b.unlocked ? 'unlocked' : ''}">${b.label}</span>`).join('');
 }
 
-function renderProfileSection() {
-    if (!currentUser) return;
-    const avatarEl = document.getElementById('profile-avatar');
-    const nameInput = document.getElementById('profile-name-input');
-    const usernameInput = document.getElementById('profile-username-input');
-    const emailInput = document.getElementById('profile-email-input');
-    if (!avatarEl || !nameInput || !usernameInput || !emailInput) return;
-
-    const name = currentUser.name || currentUser.username || '';
-    const username = currentUser.username || '';
-    const email = currentUser.email || supabaseSession?.user?.email || '';
-    const initials = name.split(' ').map(p => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || username.slice(0, 2).toUpperCase();
-    const displayNameEl = document.getElementById('profile-display-name');
-    const displayUsernameEl = document.getElementById('profile-display-username');
-
-    avatarEl.textContent = initials;
-    if (displayNameEl) displayNameEl.textContent = name || 'User';
-    if (displayUsernameEl) displayUsernameEl.textContent = `@${username}`;
-    nameInput.value = name;
-    usernameInput.value = username;
-    emailInput.value = email;
-}
-
-async function saveProfile() {
-    if (!supabaseClient || !currentUser) return;
-    const name = (document.getElementById('profile-name-input')?.value || '').trim();
-    if (!name) {
-        showToast('Name cannot be empty', 'error');
-        return;
-    }
-
-    setAuthBusy(true);
-    try {
-        const { error } = await supabaseClient.auth.updateUser({ data: { name } });
-        if (error) throw error;
-        currentUser.name = name;
-        document.getElementById('user-display-name').textContent = name;
-        renderProfileSection();
-        showToast('Profile saved', 'success');
-    } catch (err) {
-        console.error('Profile update failed', err);
-        showToast(normalizeSupabaseError(err), 'error');
-    } finally {
-        setAuthBusy(false);
-    }
-}
-
 // --- Helpers & Listeners ---
 function setupEventListeners() {
     // Auth Tab Switch
@@ -2965,6 +3375,125 @@ function setupEventListeners() {
         customDeadlineInput.addEventListener('change', restrictCustomDeadline);
     }
 
+    // Profile Form
+    const profileForm = document.getElementById('profile-edit-form');
+    if (profileForm) {
+        profileForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                showLoading(true);
+                const name = document.getElementById('profile-name-input')?.value || '';
+                const username = document.getElementById('profile-username-input')?.value || '';
+                await updateProfile(name, username);
+                showToast('Profile updated', 'success');
+            } catch (err) {
+                showToast(err.message || 'Failed to update profile', 'error');
+            } finally {
+                showLoading(false);
+            }
+        });
+    }
+
+    const cancelBtn = document.getElementById('profile-cancel-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            cancelProfileChanges();
+            showToast('Changes discarded', 'info');
+        });
+    }
+
+    const nameInput = document.getElementById('profile-name-input');
+    if (nameInput) {
+        nameInput.addEventListener('input', () => {
+            profileDraft.name = nameInput.value;
+            updateProfileSaveState();
+        });
+    }
+
+    const usernameInput = document.getElementById('profile-username-input');
+    if (usernameInput) {
+        usernameInput.addEventListener('input', () => {
+            profileDraft.username = usernameInput.value;
+            updateProfileSaveState();
+        });
+    }
+
+    const avatarBtn = document.getElementById('profile-avatar-edit');
+    const avatarInput = document.getElementById('profile-avatar-input');
+    if (avatarBtn && avatarInput) {
+        avatarBtn.addEventListener('click', () => {
+            console.log("Avatar edit button clicked");
+            avatarInput.click();
+        });
+        avatarInput.addEventListener('change', (event) => {
+            console.log("Avatar input changed");
+            const file = event.target.files && event.target.files[0];
+            if (!file) {
+                console.log("No file selected");
+                return;
+            }
+            
+            console.log("File selected:", file.name);
+            currentCropFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                console.log("File read complete, opening crop modal");
+                const cropImg = document.getElementById('crop-image');
+                cropImg.src = e.target.result;
+                document.getElementById('crop-modal').classList.add('active');
+                
+                if (cropper) cropper.destroy();
+                cropper = new Cropper(cropImg, {
+                    aspectRatio: 1,
+                    viewMode: 1,
+                    dragMode: 'move',
+                    autoCropArea: 1,
+                    restore: false,
+                    guides: false,
+                    center: true,
+                    highlight: false,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: false,
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    const cropCancelBtn = document.getElementById('crop-cancel-btn');
+    if (cropCancelBtn) {
+        cropCancelBtn.addEventListener('click', () => {
+            document.getElementById('crop-modal').classList.remove('active');
+            if (cropper) cropper.destroy();
+            cropper = null;
+        });
+    }
+
+    const cropSaveBtn = document.getElementById('crop-save-btn');
+    if (cropSaveBtn) {
+        cropSaveBtn.addEventListener('click', () => {
+            if (!cropper) return;
+            
+            const canvas = cropper.getCroppedCanvas({
+                width: 256,
+                height: 256,
+            });
+            
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            profileDraft.avatar_url = dataUrl;
+            const avatarEl = document.getElementById('profile-avatar');
+            if (avatarEl) avatarEl.src = dataUrl;
+            
+            updateProfileSaveState();
+            showToast('Photo adjusted (pending save)', 'info');
+            
+            document.getElementById('crop-modal').classList.remove('active');
+            cropper.destroy();
+            cropper = null;
+        });
+    }
+
     // Set default date/time in form
     const taskDateInput = document.getElementById('task-date');
     const taskTimeInput = document.getElementById('task-time');
@@ -3012,6 +3541,54 @@ function toggleTaskForm() {
         toggleTaskGoalLink(false);
     }
 }
+
+// === Swipe Navigation (Mobile Only) ===
+(function() {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+    let startedOnBottomNav = false;
+    
+    const viewOrder = ['tasks', 'reports', 'insights', 'me'];
+    
+    document.addEventListener('touchstart', e => {
+        startedOnBottomNav = Boolean(e.target && e.target.closest && e.target.closest('.bottom-nav'));
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+    
+    document.addEventListener('touchend', e => {
+        touchEndX = e.changedTouches[0].screenX;
+        touchEndY = e.changedTouches[0].screenY;
+        handleSwipe();
+    }, { passive: true });
+    
+    function handleSwipe() {
+        const isMobile = window.innerWidth <= 768;
+        if (!isMobile) return;
+        if (startedOnBottomNav) return;
+        
+        const diffX = touchEndX - touchStartX;
+        const diffY = touchEndY - touchStartY;
+        
+        // Only handle swipes that are mostly horizontal
+        if (Math.abs(diffX) > Math.abs(diffY) * 2 && Math.abs(diffX) > 50) {
+            const currentIndex = viewOrder.indexOf(currentView);
+            let targetIndex;
+            
+            if (diffX < 0) {
+                // Swipe left - next view
+                targetIndex = (currentIndex + 1) % viewOrder.length;
+            } else {
+                // Swipe right - previous view
+                targetIndex = (currentIndex - 1 + viewOrder.length) % viewOrder.length;
+            }
+            
+            showView(viewOrder[targetIndex]);
+        }
+    }
+})();
 
 async function forceUpdateApp() {
     if (confirm("This will clear all cache and reload the app. Continue?")) {
@@ -3079,19 +3656,32 @@ let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    document.getElementById('install-btn').style.display = 'block';
+    const installBtn = document.getElementById('install-btn');
+    const topInstallBtn = document.getElementById('top-install-btn');
+    if (installBtn) installBtn.style.display = 'block';
+    if (topInstallBtn) topInstallBtn.style.display = 'grid'; // matches .icon-btn display
 });
 
-document.getElementById('install-btn').addEventListener('click', async () => {
+async function handleInstallClick() {
     if (deferredPrompt) {
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
         if (outcome === 'accepted') {
             deferredPrompt = null;
-            document.getElementById('install-btn').style.display = 'none';
+            const installBtn = document.getElementById('install-btn');
+            const topInstallBtn = document.getElementById('top-install-btn');
+            if (installBtn) installBtn.style.display = 'none';
+            if (topInstallBtn) topInstallBtn.style.display = 'none';
         }
     }
-});
+}
+
+const installBtn = document.getElementById('install-btn');
+if (installBtn) installBtn.addEventListener('click', handleInstallClick);
+
+const topInstallBtn = document.getElementById('top-install-btn');
+if (topInstallBtn) topInstallBtn.addEventListener('click', handleInstallClick);
+
 
 // --- Share Functions ---
 let shareData = {
